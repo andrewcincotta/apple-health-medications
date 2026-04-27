@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  medications-db:
+    build: .
+    image: medications-db:latest
+    container_name: medications-db
+    volumes:
+      - medications_data:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  medications_data:
+    driver: local
