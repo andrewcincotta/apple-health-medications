@@ -1,16 +1,17 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies (sqlite3 is built-in to Python)
-RUN pip install --no-cache-dir pandas
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy CSV and build script
-COPY Medications-2026-03-26-2026-04-26.csv .
-COPY build_medications_db.py .
+COPY api ./api
+COPY ref/medication_mappings.json ./ref/medication_mappings.json
 
-# Create volume mount point for database
-VOLUME ["/data"]
+ENV MEDS_DATABASE_PATH=/data/medications.db
+ENV MEDS_STORAGE_DIR=/data/storage
+ENV MEDS_DEFAULT_MAPPING_PATH=/app/ref/medication_mappings.json
 
-# Build database on startup
-CMD ["python", "build_medications_db.py"]
+EXPOSE 8000
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

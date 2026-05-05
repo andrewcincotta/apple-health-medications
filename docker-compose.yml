@@ -1,15 +1,14 @@
-version: '3.8'
-
 services:
-  medications-db:
+  api:
     build: .
-    image: medications-db:latest
-    container_name: medications-db
-    volumes:
-      - medications_data:/data
+    ports:
+      - "8000:8000"
     environment:
-      - PYTHONUNBUFFERED=1
+      MEDS_DATABASE_PATH: /data/medications.db
+      MEDS_STORAGE_DIR: /data/storage
+      MEDS_DEFAULT_MAPPING_PATH: /app/ref/medication_mappings.json
+    volumes:
+      - sqlite_data:/data
 
 volumes:
-  medications_data:
-    driver: local
+  sqlite_data:
