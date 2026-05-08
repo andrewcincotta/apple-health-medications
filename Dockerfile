@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api ./api
+COPY mcp_server.py .
 COPY ref/medication_mappings.json ./ref/medication_mappings.json
 
 ENV MEDS_DATABASE_PATH=/data/medications.db

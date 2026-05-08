@@ -52,6 +52,8 @@ def transform_medication_csv(
         raw_rows = list(reader)
 
     raw_row_count = len(raw_rows)
+    if raw_row_count == 0:
+        raise ValueError("raw CSV has headers but no medication rows")
 
     meds_to_nicknames = mapping.get("MedsToNicknames", {})
     nicknames_to_dosage = mapping.get("NicknamesToDosage", {})
@@ -61,9 +63,19 @@ def transform_medication_csv(
     if rows and rows[0]["Scheduled Date"] != "Taken":
         rows = rows[1:]
 
+    rows = [row for row in rows if row["Dosage"] != ""]
+    if not rows:
+        raise ValueError("raw CSV has no medication rows with a dosage value")
+
     transformed_rows = []
     for row in rows:
-        count = float(row["Dosage"])
+        try:
+            count = float(row["Dosage"])
+        except ValueError as exc:
+            raise ValueError(
+                f"could not parse Dosage '{row['Dosage']}' for "
+                f"{row['Medication']} on {row['Date']}"
+            ) from exc
         nickname = meds_to_nicknames.get(row["Medication"])
         unit_mg_value = nicknames_to_dosage.get(nickname) if nickname is not None else None
         unit_mg = float(unit_mg_value) if unit_mg_value is not None else None
@@ -93,4 +105,7 @@ def read_transformed_csv(path: Path) -> list[dict[str, str]]:
         missing = [column for column in TRANSFORMED_COLUMNS if column not in (reader.fieldnames or [])]
         if missing:
             raise ValueError(f"transformed CSV is missing required columns: {', '.join(missing)}")
-        return [{column: row[column] for column in TRANSFORMED_COLUMNS} for row in reader]
+        rows = [{column: row[column] for column in TRANSFORMED_COLUMNS} for row in reader]
+    if not rows:
+        raise ValueError("transformed CSV has headers but no medication rows")
+    return rows

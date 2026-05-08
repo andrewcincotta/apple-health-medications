@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Path as ApiPath, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.config import get_settings
@@ -13,17 +14,58 @@ from api.database import ensure_user, get_connection, init_db, relative_to_cwd
 from api.transform import load_mapping, read_transformed_csv, transform_medication_csv, validate_mapping
 
 
-app = FastAPI(title="Apple Health Medications API")
+DESCRIPTION = """
+Upload Apple Health medication CSV snapshots, transform them into a stable CSV
+shape, and reconcile overlapping snapshots into a durable SQLite timeline.
+
+Typical flow:
+
+1. Create a user.
+2. Upload a raw Apple Health medication CSV.
+3. Download or inspect the transformed CSV.
+4. Import the transformed upload into the medication events table.
+"""
+
+TAGS_METADATA = [
+    {"name": "Health", "description": "Service status checks."},
+    {"name": "Users", "description": "User records used to partition medication history."},
+    {"name": "Mappings", "description": "Per-user medication name and dosage mappings."},
+    {"name": "CSVs", "description": "Raw CSV upload, transformation, download, and import workflows."},
+    {"name": "Medication Events", "description": "Reconciled medication timeline queries."},
+]
+
+app = FastAPI(
+    title="Apple Health Medications API",
+    summary="Medication CSV transformation and reconciliation backend",
+    description=DESCRIPTION,
+    version="0.1.0",
+    openapi_tags=TAGS_METADATA,
+)
 
 
 class UserCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
+    name: str = Field(
+        min_length=1,
+        max_length=120,
+        examples=["andrew"],
+        description="Display name for the person whose CSV snapshots are being stored.",
+    )
 
 
 class MappingPayload(BaseModel):
-    MedsToNicknames: dict[str, str]
-    NicknamesToDosage: dict[str, float]
-    NicknameToCost: dict[str, float] = Field(default_factory=dict)
+    MedsToNicknames: dict[str, str] = Field(
+        examples=[{"Vyvanse 50mg Capsule": "Vyvanse", "Clonazepam": "Klonopin"}],
+        description="Maps the raw Apple Health medication name to a stable nickname.",
+    )
+    NicknamesToDosage: dict[str, float] = Field(
+        examples=[{"Vyvanse": 50, "Klonopin": 0.5}],
+        description="Maps each nickname to a unit dose in milligrams.",
+    )
+    NicknameToCost: dict[str, float] = Field(
+        default_factory=dict,
+        examples=[{"Vyvanse": 12.5}],
+        description="Optional cost metadata reserved for future reporting.",
+    )
 
 
 def _store_upload(file: UploadFile, destination: Path) -> None:
@@ -65,12 +107,23 @@ def startup() -> None:
     get_settings().storage_dir.mkdir(parents=True, exist_ok=True)
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["Health"],
+    summary="Check API health",
+    description="Returns `ok` when the API process is running.",
+)
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/users", status_code=201)
+@app.post(
+    "/users",
+    status_code=201,
+    tags=["Users"],
+    summary="Create a user",
+    description="Creates a user namespace for uploads, mappings, and medication events.",
+)
 def create_user(payload: UserCreate) -> dict:
     with get_connection() as conn:
         try:
@@ -80,15 +133,31 @@ def create_user(payload: UserCreate) -> dict:
         return {"id": cursor.lastrowid, "name": payload.name}
 
 
-@app.get("/users")
+@app.get(
+    "/users",
+    tags=["Users"],
+    summary="List users",
+    description="Returns all users ordered by creation id.",
+)
 def list_users() -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute("SELECT id, name, created_at FROM users ORDER BY id").fetchall()
     return [dict(row) for row in rows]
 
 
-@app.put("/users/{user_id}/mapping")
-def upsert_mapping(user_id: int, payload: MappingPayload) -> dict:
+@app.put(
+    "/users/{user_id}/mapping",
+    tags=["Mappings"],
+    summary="Store a user mapping",
+    description=(
+        "Creates or replaces the user's medication mapping JSON. Future raw CSV "
+        "transforms for this user will use this mapping instead of the default file."
+    ),
+)
+def upsert_mapping(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    payload: MappingPayload,
+) -> dict:
     mapping = payload.model_dump()
     validate_mapping(mapping)
     with get_connection() as conn:
@@ -109,18 +178,40 @@ def upsert_mapping(user_id: int, payload: MappingPayload) -> dict:
     return {"user_id": user_id, "mapping_keys": list(mapping.keys())}
 
 
-@app.get("/users/{user_id}/mapping")
-def get_mapping(user_id: int) -> dict:
+@app.get(
+    "/users/{user_id}/mapping",
+    tags=["Mappings"],
+    summary="Get a user mapping",
+    description=(
+        "Returns the stored user mapping, or the default `ref/medication_mappings.json` "
+        "mapping when the user has not uploaded one."
+    ),
+)
+def get_mapping(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+) -> dict:
     try:
         return _user_mapping(user_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.post("/users/{user_id}/csvs", status_code=201)
+@app.post(
+    "/users/{user_id}/csvs",
+    status_code=201,
+    tags=["CSVs"],
+    summary="Upload and transform a raw CSV",
+    description=(
+        "Stores the raw Apple Health medication CSV, transforms it using the user's "
+        "mapping, stores the transformed CSV, and returns the upload id."
+    ),
+)
 def upload_and_transform_csv(
-    user_id: int,
-    file: Annotated[UploadFile, File(description="Apple Health medications CSV export")],
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    file: Annotated[
+        UploadFile,
+        File(description="Raw Apple Health medication CSV export."),
+    ],
 ) -> dict:
     settings = get_settings()
     filename = _safe_filename(file.filename)
@@ -167,10 +258,104 @@ def upload_and_transform_csv(
     }
 
 
-@app.post("/users/{user_id}/transformed-csvs/import", status_code=201)
+@app.get(
+    "/users/{user_id}/uploads",
+    tags=["CSVs"],
+    summary="List CSV uploads",
+    description=(
+        "Lists stored raw/transformed CSV uploads for a user. Use the returned "
+        "`id` as `upload_id` for transformed CSV download or import."
+    ),
+)
+def list_uploads(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    limit: Annotated[int, Query(ge=1, le=500, description="Maximum number of uploads to return.")] = 100,
+    offset: Annotated[int, Query(ge=0, description="Number of uploads to skip for pagination.")] = 0,
+) -> list[dict]:
+    with get_connection() as conn:
+        try:
+            ensure_user(conn, user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                original_filename,
+                raw_row_count,
+                transformed_row_count,
+                uploaded_at,
+                raw_path,
+                transformed_path
+            FROM csv_uploads
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (user_id, limit, offset),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.get(
+    "/users/{user_id}/uploads/{upload_id}/transformed-csv",
+    tags=["CSVs"],
+    summary="Download a transformed CSV",
+    description=(
+        "Downloads the transformed CSV created by `POST /users/{user_id}/csvs`. "
+        "Use the `upload_id` returned from the upload response."
+    ),
+    response_class=FileResponse,
+)
+def download_transformed_csv(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    upload_id: Annotated[int, ApiPath(description="Upload id returned by `POST /users/{user_id}/csvs`.")],
+) -> FileResponse:
+    with get_connection() as conn:
+        try:
+            ensure_user(conn, user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        upload = conn.execute(
+            """
+            SELECT transformed_path, original_filename
+            FROM csv_uploads
+            WHERE id = ? AND user_id = ?
+            """,
+            (upload_id, user_id),
+        ).fetchone()
+
+    if upload is None:
+        raise HTTPException(status_code=404, detail="upload not found")
+
+    transformed_path = Path(upload["transformed_path"])
+    if not transformed_path.exists():
+        raise HTTPException(status_code=404, detail="transformed CSV file not found")
+
+    return FileResponse(
+        transformed_path,
+        media_type="text/csv",
+        filename=f"transformed-{upload['original_filename']}",
+    )
+
+
+@app.post(
+    "/users/{user_id}/transformed-csvs/import",
+    status_code=201,
+    tags=["CSVs"],
+    summary="Upload and import a transformed CSV",
+    description=(
+        "Accepts a CSV that already has the transformed columns "
+        "`Date`, `Medication`, `Count`, `Nickname`, `Unit (mg)`, and `Dosage (mg)`, "
+        "then reconciles it into SQLite."
+    ),
+)
 def import_transformed_csv(
-    user_id: int,
-    file: Annotated[UploadFile, File(description="Transformed medications CSV")],
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    file: Annotated[
+        UploadFile,
+        File(description="Transformed medications CSV."),
+    ],
 ) -> dict:
     settings = get_settings()
     filename = _safe_filename(file.filename)
@@ -186,8 +371,20 @@ def import_transformed_csv(
     return _import_transformed_path(user_id, path, filename, upload_id=None)
 
 
-@app.post("/users/{user_id}/uploads/{upload_id}/import", status_code=201)
-def import_existing_upload(user_id: int, upload_id: int) -> dict:
+@app.post(
+    "/users/{user_id}/uploads/{upload_id}/import",
+    status_code=201,
+    tags=["CSVs"],
+    summary="Import a transformed upload",
+    description=(
+        "Reconciles a previously transformed upload into the medication events table. "
+        "Repeated imports are idempotent; overlapping changed rows update the timeline."
+    ),
+)
+def import_existing_upload(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    upload_id: Annotated[int, ApiPath(description="Upload id returned by `POST /users/{user_id}/csvs`.")],
+) -> dict:
     with get_connection() as conn:
         try:
             ensure_user(conn, user_id)
@@ -326,14 +523,19 @@ def _import_transformed_path(
     }
 
 
-@app.get("/users/{user_id}/medication-events")
+@app.get(
+    "/users/{user_id}/medication-events",
+    tags=["Medication Events"],
+    summary="List medication events",
+    description="Returns reconciled medication events for a user, ordered by event date.",
+)
 def list_medication_events(
-    user_id: int,
-    nickname: str | None = None,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    nickname: Annotated[str | None, Query(description="Exact nickname filter, for example `Klonopin`.")] = None,
+    date_from: Annotated[str | None, Query(description="Inclusive lower bound for the raw Apple Health date text.")] = None,
+    date_to: Annotated[str | None, Query(description="Inclusive upper bound for the raw Apple Health date text.")] = None,
+    limit: Annotated[int, Query(ge=1, le=500, description="Maximum number of events to return.")] = 100,
+    offset: Annotated[int, Query(ge=0, description="Number of events to skip for pagination.")] = 0,
 ) -> list[dict]:
     query = ["SELECT * FROM medication_events WHERE user_id = ?"]
     params: list[object] = [user_id]
@@ -347,7 +549,7 @@ def list_medication_events(
         query.append("AND date_text <= ?")
         params.append(date_to)
     query.append("ORDER BY date_text LIMIT ? OFFSET ?")
-    params.extend([min(limit, 500), offset])
+    params.extend([limit, offset])
 
     with get_connection() as conn:
         try:

@@ -1,14 +1,9 @@
 services:
   api:
     build: .
+    env_file:
+      - .env
     ports:
       - "8000:8000"
-    environment:
-      MEDS_DATABASE_PATH: /data/medications.db
-      MEDS_STORAGE_DIR: /data/storage
-      MEDS_DEFAULT_MAPPING_PATH: /app/ref/medication_mappings.json
     volumes:
-      - sqlite_data:/data
-
-volumes:
-  sqlite_data:
+      - ./data:/data
