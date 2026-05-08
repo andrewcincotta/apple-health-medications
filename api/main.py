@@ -183,7 +183,7 @@ def upsert_mapping(
     tags=["Mappings"],
     summary="Get a user mapping",
     description=(
-        "Returns the stored user mapping, or the default `ref/medication_mappings.json` "
+        "Returns the stored user mapping, or the default `config/default_medication_map.json` "
         "mapping when the user has not uploaded one."
     ),
 )

@@ -1,0 +1,39 @@
+{
+  "MedsToNicknames": {
+    "Vyvanse 50mg Capsule": "Vyvanse",
+    "Caffeine": "Caffeine",
+    "Kratom": "7-OH",
+    "KratomPowder": "Kratom",
+    "Clonazepam": "Klonopin",
+    "Benadryl": "Benadryl",
+    "Dexedrine 5mg Tablet": "Dexedrine",
+    "PMStack": "Nightly Medications",
+    "Alcohol": "Alcohol",
+    "Theanine": "Theanine",
+    "Cannabis": "Weed",
+    "Lyrica 300mg Capsule": "Lyrica",
+    "Propranolol": "Propranolol",
+    "Lorazepam": "Ativan",
+    "Velo": "Velo (3mg)",
+    "Vape": "Nicotine Vape"
+  },
+  "NicknamesToDosage": {
+    "Vyvanse": 50,
+    "Caffeine": 100,
+    "7-OH": 25,
+    "Kratom": 1000,
+    "Klonopin": 0.5,
+    "Benadryl": 25,
+    "Dexedrine": 5,
+    "Nightly Medications": 1,
+    "Alcohol": 1,
+    "Theanine": 100,
+    "Weed": 1,
+    "Lyrica": 300,
+    "Propranolol": 10,
+    "Ativan": 0.5,
+    "Velo (3mg)": 3,
+    "Nicotine Vape": 1
+  },
+  "NicknameToCost": {}
+}

@@ -8,7 +8,7 @@ class Settings:
         self.database_path = Path(os.getenv("MEDS_DATABASE_PATH", "/data/medications.db"))
         self.storage_dir = Path(os.getenv("MEDS_STORAGE_DIR", "/data/storage"))
         self.default_mapping_path = Path(
-            os.getenv("MEDS_DEFAULT_MAPPING_PATH", "ref/medication_mappings.json")
+            os.getenv("MEDS_DEFAULT_MAPPING_PATH", "config/default_medication_map.json")
         )
 
 

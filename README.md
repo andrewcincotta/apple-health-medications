@@ -3,7 +3,7 @@
 A small FastAPI backend for Apple Health medication CSV exports.
 
 It stores raw CSV snapshots, transforms them with the logic from
-`ref/Apple_Health_Medications_Data_Transformations.ipynb`, and can reconcile
+`notebooks/apple_health_medication_transform_reference.ipynb`, and can reconcile
 transformed CSV rows into a durable SQLite medication timeline.
 
 ## Stack
@@ -42,11 +42,19 @@ The default `.env` values are ready for Docker Compose:
 ```bash
 MEDS_DATABASE_PATH=/data/medications.db
 MEDS_STORAGE_DIR=/data/storage
-MEDS_DEFAULT_MAPPING_PATH=/app/ref/medication_mappings.json
+MEDS_DEFAULT_MAPPING_PATH=/app/config/default_medication_map.json
 ```
 
 `.env` and `data/` are intentionally gitignored. The application data you need
 to preserve lives under `data/`.
+
+Tracked project configuration lives outside `ref/`:
+
+- `config/default_medication_map.json`
+- `notebooks/apple_health_medication_transform_reference.ipynb`
+
+The `ref/` directory is intentionally ignored and can be used for local sample
+exports or scratch comparison files.
 
 ## Endpoints
 
@@ -56,7 +64,7 @@ to preserve lives under `data/`.
 | `POST` | `/users` | Create a user |
 | `GET` | `/users` | List users |
 | `PUT` | `/users/{user_id}/mapping` | Store or replace that user's medication mapping JSON |
-| `GET` | `/users/{user_id}/mapping` | Fetch the user's mapping, falling back to `ref/medication_mappings.json` |
+| `GET` | `/users/{user_id}/mapping` | Fetch the user's mapping, falling back to `config/default_medication_map.json` |
 | `POST` | `/users/{user_id}/csvs` | Upload a raw Apple Health CSV, store it, transform it, and store the transformed CSV |
 | `GET` | `/users/{user_id}/uploads` | List uploads and discover upload ids |
 | `GET` | `/users/{user_id}/uploads/{upload_id}/transformed-csv` | Download the transformed CSV for an upload |
@@ -78,7 +86,7 @@ Upload and transform a raw Apple Health medication export:
 
 ```bash
 curl -X POST http://localhost:8000/users/1/csvs \
-  -F "file=@ref/before/Medications-2025-04-23-2026-04-23.csv"
+  -F "file=@/path/to/Medications-2026-04-19-2026-05-02.csv"
 ```
 
 List uploads and find the `id` to use as `upload_id`:
@@ -135,9 +143,9 @@ Run it locally over stdio:
 MEDS_DATABASE_PATH=/path/to/medications.db python3 mcp_server.py
 ```
 
-If you are using Docker Compose, the database lives inside the `sqlite_data`
-volume at `/data/medications.db`. For desktop MCP clients, point the server at a
-database file on your host, or bind-mount a host directory for `/data`.
+If you are using Docker Compose, the database is bind-mounted from the host at
+`data/medications.db`. For desktop MCP clients, point the server at that host
+database file.
 
 Example client config:
 
@@ -236,12 +244,12 @@ CSV rows to update the SQLite timeline.
 
 ## Medication Mappings
 
-By default, transforms use `ref/medication_mappings.json`. You can store a
+By default, transforms use `config/default_medication_map.json`. You can store a
 per-user mapping with `PUT /users/{user_id}/mapping`; later transforms for that
 user will use the stored mapping.
 
-The checked-in `ref/after` CSV appears to have been generated with two mappings
-that are not present in the checked-in mapping JSON:
+The local sample `ref/after` CSV may have been generated with mappings that are
+not present in the tracked default mapping JSON:
 
 - `Vyvanse 60mg Capsule` -> `Vyvanse 60`, `60`
 - `Esketamine` -> `Ketamine`, `50`

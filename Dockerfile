@@ -7,11 +7,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api ./api
 COPY mcp_server.py .
-COPY ref/medication_mappings.json ./ref/medication_mappings.json
+COPY config/default_medication_map.json ./config/default_medication_map.json
 
 ENV MEDS_DATABASE_PATH=/data/medications.db
 ENV MEDS_STORAGE_DIR=/data/storage
-ENV MEDS_DEFAULT_MAPPING_PATH=/app/ref/medication_mappings.json
+ENV MEDS_DEFAULT_MAPPING_PATH=/app/config/default_medication_map.json
 
 EXPOSE 8000
 
