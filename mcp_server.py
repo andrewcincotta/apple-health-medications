@@ -1,9 +1,25 @@
 import json
+import os
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from api.database import ensure_user, get_connection, init_db
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from exc
+
+
+def _env_path(name: str, default: str) -> str:
+    value = os.getenv(name, default)
+    return value if value.startswith("/") else f"/{value}"
 
 
 mcp = FastMCP(
@@ -13,6 +29,11 @@ mcp = FastMCP(
         "Use these tools to answer questions about medication events, upload provenance, "
         "import reconciliation, and medication mapping context. Do not provide medical advice."
     ),
+    host=os.getenv("MCP_HOST", "127.0.0.1"),
+    port=_env_int("MCP_PORT", 8002),
+    streamable_http_path=_env_path("MCP_PATH", "/mcp"),
+    stateless_http=True,
+    json_response=True,
 )
 
 
@@ -23,6 +44,14 @@ def _rows_to_dicts(rows: list[Any]) -> list[dict[str, Any]]:
 def _ensure_user_id(user_id: int) -> None:
     with get_connection() as conn:
         ensure_user(conn, user_id)
+
+
+def _bounded_limit(limit: int, maximum: int = 500) -> int:
+    return max(1, min(limit, maximum))
+
+
+def _bounded_offset(offset: int) -> int:
+    return max(0, offset)
 
 
 @mcp.resource("medications://schema")
@@ -164,36 +193,151 @@ def search_medication_events(
     user_id: int,
     nickname: str | None = None,
     medication: str | None = None,
+    query_text: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    count_min: float | None = None,
+    count_max: float | None = None,
+    dosage_mg_min: float | None = None,
+    dosage_mg_max: float | None = None,
+    upload_id: int | None = None,
+    source_filename: str | None = None,
+    mapped_only: bool = False,
+    unmapped_only: bool = False,
+    exact_match: bool = False,
+    sort: str = "date_asc",
+    include_summary: bool = True,
     limit: int = 100,
     offset: int = 0,
-) -> list[dict[str, Any]]:
-    """Search reconciled medication events by user, medication/nickname, and date text bounds."""
+) -> dict[str, Any]:
+    """Flexible search over reconciled medication events with fuzzy matching, ranges, and summaries."""
     _ensure_user_id(user_id)
-    limit = max(1, min(limit, 500))
-    offset = max(0, offset)
+    limit = _bounded_limit(limit)
+    offset = _bounded_offset(offset)
 
-    query = ["SELECT * FROM medication_events WHERE user_id = ?"]
+    where = ["user_id = ?"]
     params: list[Any] = [user_id]
+
     if nickname:
-        query.append("AND nickname = ?")
-        params.append(nickname)
+        if exact_match:
+            where.append("LOWER(nickname) = LOWER(?)")
+            params.append(nickname)
+        else:
+            where.append("LOWER(nickname) LIKE LOWER(?)")
+            params.append(f"%{nickname}%")
     if medication:
-        query.append("AND medication LIKE ?")
-        params.append(f"%{medication}%")
+        if exact_match:
+            where.append("LOWER(medication) = LOWER(?)")
+            params.append(medication)
+        else:
+            where.append("LOWER(medication) LIKE LOWER(?)")
+            params.append(f"%{medication}%")
+    if query_text:
+        where.append(
+            """
+            (
+                LOWER(medication) LIKE LOWER(?)
+                OR LOWER(nickname) LIKE LOWER(?)
+                OR LOWER(source_filename) LIKE LOWER(?)
+                OR date_text LIKE ?
+            )
+            """
+        )
+        pattern = f"%{query_text}%"
+        params.extend([pattern, pattern, pattern, pattern])
     if date_from:
-        query.append("AND date_text >= ?")
+        where.append("date_text >= ?")
         params.append(date_from)
     if date_to:
-        query.append("AND date_text <= ?")
+        where.append("date_text <= ?")
         params.append(date_to)
-    query.append("ORDER BY date_text LIMIT ? OFFSET ?")
-    params.extend([limit, offset])
+    if count_min is not None:
+        where.append("count >= ?")
+        params.append(count_min)
+    if count_max is not None:
+        where.append("count <= ?")
+        params.append(count_max)
+    if dosage_mg_min is not None:
+        where.append("dosage_mg >= ?")
+        params.append(dosage_mg_min)
+    if dosage_mg_max is not None:
+        where.append("dosage_mg <= ?")
+        params.append(dosage_mg_max)
+    if upload_id is not None:
+        where.append("upload_id = ?")
+        params.append(upload_id)
+    if source_filename:
+        where.append("LOWER(source_filename) LIKE LOWER(?)")
+        params.append(f"%{source_filename}%")
+    if mapped_only:
+        where.append("nickname IS NOT NULL AND unit_mg IS NOT NULL AND dosage_mg IS NOT NULL")
+    if unmapped_only:
+        where.append("(nickname IS NULL OR unit_mg IS NULL OR dosage_mg IS NULL)")
+
+    sort_sql = {
+        "date_asc": "date_text ASC, id ASC",
+        "date_desc": "date_text DESC, id DESC",
+        "dosage_asc": "dosage_mg ASC, date_text ASC",
+        "dosage_desc": "dosage_mg DESC, date_text DESC",
+        "count_asc": "count ASC, date_text ASC",
+        "count_desc": "count DESC, date_text DESC",
+        "medication": "medication ASC, date_text ASC",
+        "nickname": "nickname ASC, date_text ASC",
+    }.get(sort, "date_text ASC, id ASC")
+
+    where_sql = " AND ".join(where)
+    events_sql = f"""
+        SELECT *
+        FROM medication_events
+        WHERE {where_sql}
+        ORDER BY {sort_sql}
+        LIMIT ? OFFSET ?
+    """
+    count_sql = f"SELECT COUNT(*) AS total_matches FROM medication_events WHERE {where_sql}"
+    summary_sql = f"""
+        SELECT
+            COUNT(*) AS event_count,
+            COUNT(DISTINCT medication) AS distinct_medications,
+            COUNT(DISTINCT nickname) AS distinct_nicknames,
+            MIN(date_text) AS first_event_at,
+            MAX(date_text) AS last_event_at,
+            ROUND(COALESCE(SUM(count), 0), 3) AS total_count,
+            ROUND(COALESCE(SUM(dosage_mg), 0), 3) AS total_dosage_mg
+        FROM medication_events
+        WHERE {where_sql}
+    """
 
     with get_connection() as conn:
-        rows = conn.execute(" ".join(query), params).fetchall()
-    return _rows_to_dicts(rows)
+        rows = conn.execute(events_sql, [*params, limit, offset]).fetchall()
+        total_matches = conn.execute(count_sql, params).fetchone()["total_matches"]
+        summary = dict(conn.execute(summary_sql, params).fetchone()) if include_summary else None
+
+    filters = {
+        "user_id": user_id,
+        "nickname": nickname,
+        "medication": medication,
+        "query_text": query_text,
+        "date_from": date_from,
+        "date_to": date_to,
+        "count_min": count_min,
+        "count_max": count_max,
+        "dosage_mg_min": dosage_mg_min,
+        "dosage_mg_max": dosage_mg_max,
+        "upload_id": upload_id,
+        "source_filename": source_filename,
+        "mapped_only": mapped_only,
+        "unmapped_only": unmapped_only,
+        "exact_match": exact_match,
+        "sort": sort,
+        "limit": limit,
+        "offset": offset,
+    }
+    return {
+        "filters": {key: value for key, value in filters.items() if value is not None},
+        "total_matches": total_matches,
+        "summary": summary,
+        "events": _rows_to_dicts(rows),
+    }
 
 
 @mcp.tool()
@@ -206,7 +350,7 @@ def get_daily_totals(
 ) -> list[dict[str, Any]]:
     """Aggregate medication event counts and dosage totals by calendar day and nickname."""
     _ensure_user_id(user_id)
-    limit = max(1, min(limit, 500))
+    limit = _bounded_limit(limit)
 
     query = [
         """
@@ -248,8 +392,8 @@ def get_daily_totals(
 def list_uploads(user_id: int, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     """List raw/transformed CSV uploads for a user."""
     _ensure_user_id(user_id)
-    limit = max(1, min(limit, 500))
-    offset = max(0, offset)
+    limit = _bounded_limit(limit)
+    offset = _bounded_offset(offset)
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -275,8 +419,8 @@ def list_uploads(user_id: int, limit: int = 100, offset: int = 0) -> list[dict[s
 def list_import_runs(user_id: int, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     """List CSV import/reconciliation runs for a user."""
     _ensure_user_id(user_id)
-    limit = max(1, min(limit, 500))
-    offset = max(0, offset)
+    limit = _bounded_limit(limit)
+    offset = _bounded_offset(offset)
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -355,7 +499,8 @@ def medication_history_review(user_id: int) -> str:
 
 def main() -> None:
     init_db()
-    mcp.run()
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":

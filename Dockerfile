@@ -14,5 +14,6 @@ ENV MEDS_STORAGE_DIR=/data/storage
 ENV MEDS_DEFAULT_MAPPING_PATH=/app/config/default_medication_map.json
 
 EXPOSE 8000
+EXPOSE 8002
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

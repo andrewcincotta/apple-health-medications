@@ -137,10 +137,26 @@ Available MCP capabilities:
 - Prompt:
   - `medication_history_review`
 
+`search_medication_events` is the broad lookup tool. It supports fuzzy
+`query_text`, partial or exact `nickname` / `medication` matching, date bounds,
+count and dosage ranges, upload/source filters, mapped/unmapped filters, sort
+options, pagination, and an optional summary block.
+
 Run it locally over stdio:
 
 ```bash
 MEDS_DATABASE_PATH=/path/to/medications.db python3 mcp_server.py
+```
+
+Run it as a Streamable HTTP server:
+
+```bash
+MCP_TRANSPORT=streamable-http \
+MCP_HOST=127.0.0.1 \
+MCP_PORT=8002 \
+MCP_PATH=/mcp \
+MEDS_DATABASE_PATH=/path/to/medications.db \
+python3 mcp_server.py
 ```
 
 If you are using Docker Compose, the database is bind-mounted from the host at
@@ -162,6 +178,75 @@ Example client config:
   }
 }
 ```
+
+The Docker Compose file also runs a dedicated MCP HTTP service on the Docker
+host's loopback interface:
+
+```text
+127.0.0.1:8002 -> mcp:8002/mcp
+```
+
+That means it is not exposed directly on your LAN. To use it remotely from your
+Mac, tunnel it over SSH:
+
+```bash
+ssh -N -L 8002:127.0.0.1:8002 user@192.168.0.7
+```
+
+Then configure Raycast with an HTTP MCP server URL:
+
+```text
+http://127.0.0.1:8002/mcp
+```
+
+## Mac LAN Access: DataGrip and Raycast
+
+When this runs on a Proxmox VM or Docker host at `192.168.0.7`, the API should
+be reachable from your Mac at:
+
+- API docs: `http://192.168.0.7:8000/docs`
+- OpenAPI JSON: `http://192.168.0.7:8000/openapi.json`
+- Portainer: `http://192.168.0.7:9000`
+
+SQLite is not a TCP database server, so DataGrip cannot connect to
+`192.168.0.7:8000` as a SQLite database. Port `8000` is the FastAPI app. For
+DataGrip, mount or copy the database file from the VM and open that file:
+
+```text
+/path/to/apple-health-medications/data/medications.db
+```
+
+The safest live setup is to mount the VM project directory read-only on your Mac
+and point DataGrip at the mounted `medications.db` file. For example, with
+SSHFS:
+
+```bash
+brew install macfuse gromgit/fuse/sshfs-mac
+mkdir -p ~/Mounts/apple-health-medications
+sshfs -o ro user@192.168.0.7:/path/to/apple-health-medications \
+  ~/Mounts/apple-health-medications
+```
+
+Then create a DataGrip SQLite data source using:
+
+```text
+~/Mounts/apple-health-medications/data/medications.db
+```
+
+Use read-only mode in DataGrip if you are inspecting production medication data.
+SQLite allows multiple readers, but accidental writes from a desktop client are
+not worth the risk while the API container is also using the file.
+
+Raycast should use the remote MCP service through the SSH tunnel described
+above. Keep the tunnel running, then add an HTTP MCP server in Raycast with:
+
+```text
+http://127.0.0.1:8002/mcp
+```
+
+If you would rather avoid a live DataGrip mount, copy `data/medications.db` to
+the Mac and point DataGrip at the local copy. That is simpler and safer, but it
+will only be current as of the last copy.
 
 ## Proxmox / Docker Server Deployment
 
