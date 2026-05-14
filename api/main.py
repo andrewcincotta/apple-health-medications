@@ -1,17 +1,26 @@
+import csv
 import hashlib
+import io
 import json
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, Path as ApiPath, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.config import get_settings
 from api.database import ensure_user, get_connection, init_db, relative_to_cwd
-from api.transform import load_mapping, read_transformed_csv, transform_medication_csv, validate_mapping
+from api.transform import (
+    TRANSFORMED_COLUMNS,
+    load_mapping,
+    read_transformed_csv,
+    transform_medication_csv,
+    validate_mapping,
+)
 
 
 DESCRIPTION = """
@@ -337,6 +346,69 @@ def download_transformed_csv(
         media_type="text/csv",
         filename=f"transformed-{upload['original_filename']}",
     )
+
+
+@app.get(
+    "/users/{user_id}/medication-events.csv",
+    tags=["Medication Events"],
+    summary="Download medication events as a transformed CSV",
+    description=(
+        "Builds a CSV snapshot from reconciled SQLite medication events for an "
+        "inclusive raw Apple Health date range. The output columns match the "
+        "transformed CSV format: `Date`, `Medication`, `Count`, `Nickname`, "
+        "`Unit (mg)`, and `Dosage (mg)`."
+    ),
+    response_class=StreamingResponse,
+)
+def download_medication_events_csv(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    start_date: Annotated[
+        date,
+        Query(description="Inclusive lower date bound, formatted as `YYYY-MM-DD`."),
+    ],
+    end_date: Annotated[
+        date,
+        Query(description="Inclusive upper date bound, formatted as `YYYY-MM-DD`."),
+    ],
+) -> StreamingResponse:
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="start_date must be before or equal to end_date")
+
+    start_bound = start_date.isoformat()
+    end_exclusive_bound = (end_date + timedelta(days=1)).isoformat()
+
+    with get_connection() as conn:
+        try:
+            ensure_user(conn, user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        rows = conn.execute(
+            """
+            SELECT
+                date_text AS "Date",
+                medication AS "Medication",
+                count AS "Count",
+                COALESCE(nickname, '') AS "Nickname",
+                COALESCE(unit_mg, '') AS "Unit (mg)",
+                COALESCE(dosage_mg, '') AS "Dosage (mg)"
+            FROM medication_events
+            WHERE user_id = ?
+              AND date_text >= ?
+              AND date_text < ?
+            ORDER BY date_text ASC, id ASC
+            """,
+            (user_id, start_bound, end_exclusive_bound),
+        ).fetchall()
+
+    csv_file = io.StringIO()
+    writer = csv.DictWriter(csv_file, fieldnames=TRANSFORMED_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(dict(row) for row in rows)
+    csv_file.seek(0)
+
+    filename = f"medication-events-{user_id}-{start_date.isoformat()}-to-{end_date.isoformat()}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(iter([csv_file.getvalue()]), media_type="text/csv", headers=headers)
 
 
 @app.post(

@@ -19,7 +19,7 @@ services:
       MCP_PORT: 8002
       MCP_PATH: /mcp
     ports:
-      - "127.0.0.1:8002:8002"
+      - "8002:8002"
     volumes:
       - ./data:/data
     restart: always

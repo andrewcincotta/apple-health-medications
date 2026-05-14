@@ -71,6 +71,7 @@ exports or scratch comparison files.
 | `POST` | `/users/{user_id}/uploads/{upload_id}/import` | Import a previously transformed upload into SQLite |
 | `POST` | `/users/{user_id}/transformed-csvs/import` | Upload and import an already transformed CSV |
 | `GET` | `/users/{user_id}/medication-events` | Query reconciled medication events |
+| `GET` | `/users/{user_id}/medication-events.csv` | Download a transformed-format CSV snapshot from the SQLite timeline |
 
 ## Example Flow
 
@@ -114,6 +115,13 @@ Query the perpetual medication timeline:
 curl "http://localhost:8000/users/1/medication-events?nickname=Klonopin&limit=25"
 ```
 
+Download a transformed-format CSV snapshot from the SQLite timeline:
+
+```bash
+curl -L "http://localhost:8000/users/1/medication-events.csv?start_date=2026-04-19&end_date=2026-05-02" \
+  -o medications-2026-04-19-to-2026-05-02.csv
+```
+
 ## MCP Server
 
 The repo includes a read-only MCP server in `mcp_server.py`. It connects to the
@@ -125,13 +133,19 @@ Available MCP capabilities:
   - `medications://schema`
   - `medications://users`
   - `medications://users/{user_id}/overview`
+  - `medications://users/{user_id}/medications`
 - Tools:
   - `list_users`
   - `get_user_overview`
+  - `get_medication_catalog`
   - `search_medication_events`
+  - `summarize_date_range`
+  - `compare_date_ranges`
   - `get_daily_totals`
+  - `generate_transformed_csv_snapshot`
   - `list_uploads`
   - `list_import_runs`
+  - `get_import_quality_summary`
   - `get_medication_mapping`
   - `find_mapping_gaps`
 - Prompt:
@@ -198,6 +212,31 @@ Then configure Raycast with an HTTP MCP server URL:
 ```text
 http://127.0.0.1:8002/mcp
 ```
+
+You can expose MCP directly on the LAN instead of tunneling. Change the MCP
+port mapping in `docker-compose.yml` from:
+
+```yaml
+- "127.0.0.1:8002:8002"
+```
+
+to:
+
+```yaml
+- "8002:8002"
+```
+
+Then rebuild/restart and use this Raycast URL:
+
+```text
+http://192.168.0.7:8002/mcp
+```
+
+The tradeoff is security. The MCP server is read-only, but it still exposes
+medication history and currently has no authentication layer. SSH tunneling
+keeps the service private to the VM and only reachable by someone who can SSH
+into it. Direct LAN exposure is fine for a trusted home network if you accept
+that risk; avoid forwarding `8002` through your router or exposing it publicly.
 
 ## Mac LAN Access: DataGrip and Raycast
 
