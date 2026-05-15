@@ -8,6 +8,14 @@ services:
     volumes:
       - ./data:/data
 
+  web:
+    build: ./web
+    depends_on:
+      - api
+    ports:
+      - "8003:80"
+    restart: always
+
   mcp:
     build: .
     env_file:

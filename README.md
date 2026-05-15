@@ -13,6 +13,7 @@ transformed CSV rows into a durable SQLite medication timeline.
 | API | FastAPI + Uvicorn |
 | LLM Context | MCP Python SDK |
 | Database | SQLite |
+| Web UI | Static HTML/CSS/JS + nginx |
 | Runtime | Docker + Docker Compose |
 
 SQLite is embedded and file-backed, so the API uses `/data/medications.db`.
@@ -24,6 +25,8 @@ backup and server-to-server transfer straightforward.
 ```bash
 docker compose up --build
 ```
+
+Web UI is available at http://localhost:8003.
 
 API docs are available at http://localhost:8000/docs.
 
@@ -65,6 +68,7 @@ exports or scratch comparison files.
 | `GET` | `/users` | List users |
 | `PUT` | `/users/{user_id}/mapping` | Store or replace that user's medication mapping JSON |
 | `GET` | `/users/{user_id}/mapping` | Fetch the user's mapping, falling back to `config/default_medication_map.json` |
+| `GET` | `/users/{user_id}/medications` | List distinct reconciled medications for UI selectors |
 | `POST` | `/users/{user_id}/csvs` | Upload a raw Apple Health CSV, store it, transform it, and store the transformed CSV |
 | `GET` | `/users/{user_id}/uploads` | List uploads and discover upload ids |
 | `GET` | `/users/{user_id}/uploads/{upload_id}/transformed-csv` | Download the transformed CSV for an upload |
@@ -121,6 +125,29 @@ Download a transformed-format CSV snapshot from the SQLite timeline:
 curl -L "http://localhost:8000/users/1/medication-events.csv?start_date=2026-04-19&end_date=2026-05-02" \
   -o medications-2026-04-19-to-2026-05-02.csv
 ```
+
+## Web UI
+
+The `web/` directory contains a small dependency-free frontend served by its own
+nginx container. Docker Compose publishes it on:
+
+```text
+http://localhost:8003
+```
+
+The UI is intentionally read-only. It lists users, lets you select a reconciled
+medication, and renders an Apple Health-style medication detail view:
+
+- a 28-day highlights grid where logged days are blue and missing days are gray
+- month markers when the range crosses a month boundary
+- a details card with the selected medication name, form, and latest known dose
+
+The web container proxies browser requests from `/api/...` to the FastAPI
+service at `api:8000`, so the browser talks to one origin and no CORS setup is
+needed.
+
+If the UI says no medication events were found, complete the import flow first:
+upload/transform a CSV, then import the transformed upload into SQLite.
 
 ## MCP Server
 

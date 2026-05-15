@@ -40,6 +40,7 @@ TAGS_METADATA = [
     {"name": "Users", "description": "User records used to partition medication history."},
     {"name": "Mappings", "description": "Per-user medication name and dosage mappings."},
     {"name": "CSVs", "description": "Raw CSV upload, transformation, download, and import workflows."},
+    {"name": "Medications", "description": "Medication catalog metadata for UI selection."},
     {"name": "Medication Events", "description": "Reconciled medication timeline queries."},
 ]
 
@@ -108,6 +109,10 @@ def _row_hash(row: dict) -> str:
 
 def _optional_float(value: str) -> float | None:
     return None if value == "" else float(value)
+
+
+def _display_name(row: dict) -> str:
+    return row["nickname"] or row["medication"]
 
 
 @app.on_event("startup")
@@ -593,6 +598,64 @@ def _import_transformed_path(
         "unchanged": unchanged,
         "errors": errors,
     }
+
+
+@app.get(
+    "/users/{user_id}/medications",
+    tags=["Medications"],
+    summary="List medications for a user",
+    description=(
+        "Returns distinct reconciled medications for a user, including display name, "
+        "latest dose metadata, and logged-day counts. Intended for lightweight UI selectors."
+    ),
+)
+def list_medications(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+) -> list[dict]:
+    with get_connection() as conn:
+        try:
+            ensure_user(conn, user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        rows = conn.execute(
+            """
+            WITH ranked AS (
+                SELECT
+                    medication,
+                    nickname,
+                    unit_mg,
+                    dosage_mg,
+                    date_text,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY COALESCE(nickname, medication)
+                        ORDER BY date_text DESC, id DESC
+                    ) AS rn,
+                    COUNT(*) OVER (PARTITION BY COALESCE(nickname, medication)) AS event_count,
+                    MIN(date_text) OVER (PARTITION BY COALESCE(nickname, medication)) AS first_logged_at,
+                    MAX(date_text) OVER (PARTITION BY COALESCE(nickname, medication)) AS last_logged_at
+                FROM medication_events
+                WHERE user_id = ?
+            )
+            SELECT
+                medication,
+                nickname,
+                unit_mg,
+                dosage_mg,
+                event_count,
+                first_logged_at,
+                last_logged_at
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY COALESCE(nickname, medication)
+            """,
+            (user_id,),
+        ).fetchall()
+
+    medications = []
+    for row in rows:
+        medication = dict(row)
+        medications.append({**medication, "display_name": _display_name(medication)})
+    return medications
 
 
 @app.get(
