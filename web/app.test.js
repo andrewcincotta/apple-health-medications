@@ -1,0 +1,243 @@
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, test } from "node:test";
+
+const ELEMENT_IDS = [
+  "user-select",
+  "medication-select",
+  "status-panel",
+  "medication-view",
+  "refresh-button",
+  "calendar-grid",
+  "page-title",
+  "nav-title",
+  "highlight-name",
+  "highlight-copy",
+  "detail-name",
+  "detail-dose",
+  "range-copy",
+];
+
+class FakeClassList {
+  constructor() {
+    this.names = new Set();
+  }
+
+  add(name) {
+    this.names.add(name);
+  }
+
+  toggle(name, force) {
+    if (force) {
+      this.names.add(name);
+      return true;
+    }
+    this.names.delete(name);
+    return false;
+  }
+
+  contains(name) {
+    return this.names.has(name);
+  }
+}
+
+class FakeElement {
+  constructor(tagName = "div") {
+    this.tagName = tagName.toUpperCase();
+    this.children = [];
+    this.attributes = new Map();
+    this.classList = new FakeClassList();
+    this.style = {};
+    this.hidden = false;
+    this.textContent = "";
+    this.value = "";
+  }
+
+  addEventListener(type, listener) {
+    this[`on${type}`] = listener;
+  }
+
+  appendChild(child) {
+    this.children.push(child);
+    return child;
+  }
+
+  insertAdjacentHTML(_position, html) {
+    const child = new FakeElement("span");
+    child.innerHTML = html;
+    this.children.push(child);
+  }
+
+  replaceChildren(...children) {
+    this.children = children;
+    if (this.tagName === "SELECT") {
+      this.value = children[0]?.value ?? "";
+    }
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name) {
+    return this.attributes.get(name);
+  }
+}
+
+function setupDom() {
+  const elements = new Map(
+    ELEMENT_IDS.map((id) => {
+      const tag = id.endsWith("-select") ? "select" : "div";
+      return [id, new FakeElement(tag)];
+    }),
+  );
+
+  globalThis.document = {
+    createElement: (tagName) => new FakeElement(tagName),
+    querySelector: (selector) => {
+      const id = selector.startsWith("#") ? selector.slice(1) : selector;
+      const element = elements.get(id);
+      if (!element) throw new Error(`Missing fake element for selector ${selector}`);
+      return element;
+    },
+  };
+
+  return elements;
+}
+
+async function importApp() {
+  globalThis.__MEDS_SKIP_AUTO_START__ = true;
+  return import(`./app.js?test=${Date.now()}-${Math.random()}`);
+}
+
+beforeEach(() => {
+  setupDom();
+});
+
+afterEach(() => {
+  delete globalThis.document;
+  delete globalThis.fetch;
+  delete globalThis.__MEDS_SKIP_AUTO_START__;
+});
+
+test("fetchJson sends web UI requests through the nginx /api proxy path", async () => {
+  const seenUrls = [];
+  globalThis.fetch = async (url) => {
+    seenUrls.push(url);
+    return {
+      ok: true,
+      json: async () => [{ id: 1, name: "Andrew" }],
+    };
+  };
+
+  const { fetchJson } = await importApp();
+  const data = await fetchJson("/users");
+
+  assert.deepEqual(data, [{ id: 1, name: "Andrew" }]);
+  assert.deepEqual(seenUrls, ["/api/users"]);
+});
+
+test("loadUsers renders medication detail data from users, medications, and events endpoints", async () => {
+  const elements = setupDom();
+  const seenUrls = [];
+  globalThis.fetch = async (url) => {
+    seenUrls.push(url);
+    if (url === "/api/users") {
+      return response([{ id: 1, name: "Andrew" }]);
+    }
+    if (url === "/api/users/1/medications") {
+      return response([
+        {
+          medication: "clonazepam 0.5 MG Oral Tablet",
+          nickname: "Klonopin",
+          unit_mg: 0.5,
+          dosage_mg: 0.5,
+          display_name: "Klonopin",
+        },
+      ]);
+    }
+    if (url.startsWith("/api/users/1/medication-events?")) {
+      return response([
+        {
+          medication: "clonazepam 0.5 MG Oral Tablet",
+          nickname: "Klonopin",
+          date_text: "2026-05-15 08:00:00 -0400",
+        },
+      ]);
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const { loadUsers } = await importApp();
+  await loadUsers();
+
+  assert.equal(elements.get("page-title").textContent, "Klonopin");
+  assert.equal(elements.get("detail-name").textContent, "Klonopin");
+  assert.equal(elements.get("detail-dose").textContent, "0.5 mg");
+  assert.equal(elements.get("medication-view").hidden, false);
+  assert.equal(elements.get("status-panel").hidden, true);
+
+  const eventsUrl = new URL(seenUrls[2], "http://example.test");
+  assert.deepEqual(seenUrls.slice(0, 2), ["/api/users", "/api/users/1/medications"]);
+  assert.equal(eventsUrl.pathname, "/api/users/1/medication-events");
+  assert.equal(eventsUrl.searchParams.get("limit"), "500");
+  assert.equal(eventsUrl.searchParams.get("nickname"), "Klonopin");
+  assert.match(eventsUrl.searchParams.get("date_from"), /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(eventsUrl.searchParams.get("date_to"), /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test("loadUsers queries raw medication events when the selected medication has no nickname", async () => {
+  const seenUrls = [];
+  globalThis.fetch = async (url) => {
+    seenUrls.push(url);
+    if (url === "/api/users") return response([{ id: 1, name: "Andrew" }]);
+    if (url === "/api/users/1/medications") {
+      return response([
+        {
+          medication: "Unmapped Supplement",
+          nickname: null,
+          unit_mg: null,
+          dosage_mg: null,
+          display_name: "Unmapped Supplement",
+        },
+      ]);
+    }
+    if (url.startsWith("/api/users/1/medication-events?")) {
+      return response([
+        {
+          medication: "Unmapped Supplement",
+          nickname: null,
+          date_text: "2026-05-15 08:00:00 -0400",
+        },
+      ]);
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const { loadUsers } = await importApp();
+  await loadUsers();
+
+  const eventsUrl = new URL(seenUrls[2], "http://example.test");
+  assert.equal(eventsUrl.pathname, "/api/users/1/medication-events");
+  assert.equal(eventsUrl.searchParams.has("nickname"), false);
+});
+
+test("loadUsers surfaces API detail errors in the status panel", async () => {
+  const elements = setupDom();
+  globalThis.fetch = async () => ({
+    ok: false,
+    text: async () => '{"detail":"Not Found"}',
+  });
+
+  const { loadUsers, setStatus } = await importApp();
+  await loadUsers().catch((error) => setStatus(error.message, true));
+
+  assert.equal(elements.get("status-panel").textContent, '{"detail":"Not Found"}');
+  assert.equal(elements.get("status-panel").classList.contains("is-error"), true);
+});
+
+function response(payload) {
+  return {
+    ok: true,
+    json: async () => payload,
+  };
+}

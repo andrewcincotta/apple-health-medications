@@ -1,5 +1,5 @@
-const API_BASE = "/api";
-const LOOKBACK_DAYS = 28;
+export const API_BASE = "/api";
+export const LOOKBACK_DAYS = 28;
 const loggedColor = "#10bfdf";
 const missedColor = "#c9c9cc";
 const todayColor = "#77797d";
@@ -16,24 +16,24 @@ let users = [];
 let medications = [];
 let selectedMedication = null;
 
-function localIsoDate(date) {
+export function localIsoDate(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-function addDays(date, days) {
+export function addDays(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
 }
 
-function parseEventDate(value) {
+export function parseEventDate(value) {
   return value.slice(0, 10);
 }
 
-async function fetchJson(path) {
+export async function fetchJson(path) {
   const response = await fetch(`${API_BASE}${path}`);
   if (!response.ok) {
     const text = await response.text();
@@ -42,18 +42,18 @@ async function fetchJson(path) {
   return response.json();
 }
 
-function setStatus(message, isError = false) {
+export function setStatus(message, isError = false) {
   statusPanel.textContent = message;
   statusPanel.classList.toggle("is-error", isError);
   statusPanel.hidden = false;
 }
 
-function showView() {
+export function showView() {
   statusPanel.hidden = true;
   medicationView.hidden = false;
 }
 
-function setOptions(select, rows, getValue, getLabel) {
+export function setOptions(select, rows, getValue, getLabel) {
   select.replaceChildren(
     ...rows.map((row) => {
       const option = document.createElement("option");
@@ -64,17 +64,17 @@ function setOptions(select, rows, getValue, getLabel) {
   );
 }
 
-function medicationKey(medication) {
+export function medicationKey(medication) {
   return medication.display_name;
 }
 
-function doseLabel(medication) {
+export function doseLabel(medication) {
   const dose = medication.unit_mg ?? medication.dosage_mg;
   if (dose === null || dose === undefined || dose === "") return "Dose unknown";
   return `${Number(dose).toLocaleString("en-US", { maximumFractionDigits: 2 })} mg`;
 }
 
-function buildCalendarDays(endDate) {
+export function buildCalendarDays(endDate) {
   const days = [];
   const startDate = addDays(endDate, -(LOOKBACK_DAYS - 1));
   for (let cursor = new Date(startDate); cursor <= endDate; cursor = addDays(cursor, 1)) {
@@ -83,12 +83,12 @@ function buildCalendarDays(endDate) {
   return days;
 }
 
-function renderMonthMarker(day, previousDay) {
+export function renderMonthMarker(day, previousDay) {
   if (!previousDay || day.getMonth() === previousDay.getMonth()) return "";
   return `<span class="month-marker">${formatMonth.format(day).toUpperCase()}</span>`;
 }
 
-function renderCalendar(days, loggedDates) {
+export function renderCalendar(days, loggedDates) {
   const grid = document.querySelector("#calendar-grid");
   const todayIso = localIsoDate(new Date());
   grid.replaceChildren();
@@ -122,7 +122,7 @@ function renderCalendar(days, loggedDates) {
   });
 }
 
-async function loadEvents() {
+export async function loadEvents() {
   const userId = userSelect.value;
   const medicationName = medicationSelect.value;
   selectedMedication = medications.find((medication) => medicationKey(medication) === medicationName);
@@ -164,7 +164,7 @@ async function loadEvents() {
   showView();
 }
 
-async function loadMedications() {
+export async function loadMedications() {
   const userId = userSelect.value;
   medications = await fetchJson(`/users/${userId}/medications`);
   if (medications.length === 0) {
@@ -178,7 +178,7 @@ async function loadMedications() {
   await loadEvents();
 }
 
-async function loadUsers() {
+export async function loadUsers() {
   setStatus("Loading users...");
   users = await fetchJson("/users");
   if (users.length === 0) {
@@ -189,16 +189,22 @@ async function loadUsers() {
   await loadMedications();
 }
 
-userSelect.addEventListener("change", () => {
-  loadMedications().catch((error) => setStatus(error.message, true));
-});
+export function startApp() {
+  userSelect.addEventListener("change", () => {
+    loadMedications().catch((error) => setStatus(error.message, true));
+  });
 
-medicationSelect.addEventListener("change", () => {
-  loadEvents().catch((error) => setStatus(error.message, true));
-});
+  medicationSelect.addEventListener("change", () => {
+    loadEvents().catch((error) => setStatus(error.message, true));
+  });
 
-refreshButton.addEventListener("click", () => {
-  loadEvents().catch((error) => setStatus(error.message, true));
-});
+  refreshButton.addEventListener("click", () => {
+    loadEvents().catch((error) => setStatus(error.message, true));
+  });
 
-loadUsers().catch((error) => setStatus(error.message, true));
+  loadUsers().catch((error) => setStatus(error.message, true));
+}
+
+if (!globalThis.__MEDS_SKIP_AUTO_START__) {
+  startApp();
+}
