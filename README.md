@@ -68,6 +68,8 @@ exports or scratch comparison files.
 | `GET` | `/users` | List users |
 | `PUT` | `/users/{user_id}/mapping` | Store or replace that user's medication mapping JSON |
 | `GET` | `/users/{user_id}/mapping` | Fetch the user's mapping, falling back to `config/default_medication_map.json` |
+| `POST` | `/users/{user_id}/medication-events/remap` | Reapply the active mapping to existing SQLite medication events |
+| `POST` | `/medication-events/remap` | Reapply active mappings to existing SQLite medication events for all users |
 | `GET` | `/users/{user_id}/medications` | List distinct reconciled medications for UI selectors |
 | `POST` | `/users/{user_id}/csvs` | Upload a raw Apple Health CSV, store it, transform it, and store the transformed CSV |
 | `GET` | `/users/{user_id}/uploads` | List uploads and discover upload ids |
@@ -398,6 +400,23 @@ CSV rows to update the SQLite timeline.
 By default, transforms use `config/default_medication_map.json`. You can store a
 per-user mapping with `PUT /users/{user_id}/mapping`; later transforms for that
 user will use the stored mapping.
+
+If existing SQLite rows were imported with an old or incomplete mapping, reapply
+the active mapping in place:
+
+```sh
+curl -X POST http://localhost:8000/users/1/medication-events/remap
+```
+
+To repair every user in the database:
+
+```sh
+curl -X POST http://localhost:8000/medication-events/remap
+```
+
+The repair uses the user's stored mapping when present, otherwise the default
+mapping. It recalculates `Nickname`, `Unit (mg)`, `Dosage (mg)`, and the row
+hash for every stored event for that user.
 
 The local sample `ref/after` CSV may have been generated with mappings that are
 not present in the tracked default mapping JSON:

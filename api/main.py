@@ -115,6 +115,87 @@ def _display_name(row: dict) -> str:
     return row["nickname"] or row["medication"]
 
 
+def _mapped_event_fields(row: dict, mapping: dict) -> dict:
+    meds_to_nicknames = mapping.get("MedsToNicknames", {})
+    nicknames_to_dosage = mapping.get("NicknamesToDosage", {})
+    nickname = meds_to_nicknames.get(row["medication"])
+    unit_mg_value = nicknames_to_dosage.get(nickname) if nickname is not None else None
+    unit_mg = float(unit_mg_value) if unit_mg_value is not None else None
+    dosage_mg = round(float(row["count"]) * unit_mg, 3) if unit_mg is not None else None
+    return {
+        "Date": row["date_text"],
+        "Medication": row["medication"],
+        "Count": float(row["count"]),
+        "Nickname": nickname,
+        "Unit (mg)": unit_mg,
+        "Dosage (mg)": dosage_mg,
+    }
+
+
+def _remap_medication_events_for_user(conn, user_id: int, mapping: dict) -> dict:
+    updated = unchanged = errors = 0
+    rows = conn.execute(
+        """
+        SELECT id, date_text, medication, count, nickname, unit_mg, dosage_mg, row_hash
+        FROM medication_events
+        WHERE user_id = ?
+        ORDER BY date_text, id
+        """,
+        (user_id,),
+    ).fetchall()
+
+    for row in rows:
+        try:
+            event = _mapped_event_fields(dict(row), mapping)
+            row_hash = _row_hash(event)
+            current = {
+                "nickname": row["nickname"],
+                "unit_mg": row["unit_mg"],
+                "dosage_mg": row["dosage_mg"],
+                "row_hash": row["row_hash"],
+            }
+            remapped = {
+                "nickname": event["Nickname"],
+                "unit_mg": event["Unit (mg)"],
+                "dosage_mg": event["Dosage (mg)"],
+                "row_hash": row_hash,
+            }
+
+            if current == remapped:
+                unchanged += 1
+                continue
+
+            conn.execute(
+                """
+                UPDATE medication_events
+                SET nickname = ?,
+                    unit_mg = ?,
+                    dosage_mg = ?,
+                    row_hash = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    event["Nickname"],
+                    event["Unit (mg)"],
+                    event["Dosage (mg)"],
+                    row_hash,
+                    row["id"],
+                ),
+            )
+            updated += 1
+        except Exception:
+            errors += 1
+
+    return {
+        "user_id": user_id,
+        "scanned": updated + unchanged + errors,
+        "updated": updated,
+        "unchanged": unchanged,
+        "errors": errors,
+    }
+
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
@@ -208,6 +289,74 @@ def get_mapping(
         return _user_mapping(user_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post(
+    "/users/{user_id}/medication-events/remap",
+    tags=["Mappings"],
+    summary="Reapply medication mappings to stored events",
+    description=(
+        "Recomputes `nickname`, `unit_mg`, and `dosage_mg` for every stored "
+        "medication event for the user using the user's saved mapping, or the "
+        "default mapping when the user has not saved one. Existing rows are "
+        "updated only when the recalculated mapped fields differ."
+    ),
+)
+def remap_medication_events(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+) -> dict:
+    try:
+        mapping = _user_mapping(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        validate_mapping(mapping)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    with get_connection() as conn:
+        try:
+            ensure_user(conn, user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        return _remap_medication_events_for_user(conn, user_id, mapping)
+
+
+@app.post(
+    "/medication-events/remap",
+    tags=["Mappings"],
+    summary="Reapply medication mappings to all stored events",
+    description=(
+        "Recomputes mapped medication fields for every user's stored events. "
+        "Each user is repaired with their saved mapping when present, or the "
+        "default mapping otherwise."
+    ),
+)
+def remap_all_medication_events() -> dict:
+    per_user = []
+    with get_connection() as conn:
+        users = conn.execute("SELECT id FROM users ORDER BY id").fetchall()
+        for user in users:
+            try:
+                mapping = _user_mapping(user["id"])
+                validate_mapping(mapping)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            per_user.append(_remap_medication_events_for_user(conn, user["id"], mapping))
+
+    totals = {
+        "users": len(per_user),
+        "scanned": sum(row["scanned"] for row in per_user),
+        "updated": sum(row["updated"] for row in per_user),
+        "unchanged": sum(row["unchanged"] for row in per_user),
+        "errors": sum(row["errors"] for row in per_user),
+    }
+    return {
+        **totals,
+        "per_user": per_user,
+    }
 
 
 @app.post(
