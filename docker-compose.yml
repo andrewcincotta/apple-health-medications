@@ -33,10 +33,11 @@ services:
     restart: always
 
   sqlite-web:
-    image: coleifer/sqlite-web
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlite-web
     ports:
       - "8001:8080"
     volumes:
       - ./data:/data
-    command: sqlite_web -H 0.0.0.0 /data/medications.db
     restart: always

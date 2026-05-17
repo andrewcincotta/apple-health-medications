@@ -27,6 +27,10 @@ select {
   font: inherit;
 }
 
+button {
+  cursor: pointer;
+}
+
 .app-shell {
   width: min(100%, 1080px);
   margin: 0 auto;
@@ -175,6 +179,34 @@ h2 {
   font-weight: 850;
 }
 
+.calendar-controls {
+  display: grid;
+  grid-template-columns: 38px 1fr 38px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.calendar-controls button {
+  width: 38px;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 999px;
+  background: #eef9fc;
+  color: var(--link);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.calendar-controls p {
+  min-height: 20px;
+  margin: 0;
+  color: #535359;
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+}
+
 .weekday-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -208,9 +240,21 @@ h2 {
   place-items: center;
   width: clamp(38px, 8vw, 44px);
   aspect-ratio: 1;
+  border: 0;
   border-radius: 999px;
   font-size: 19px;
   font-weight: 700;
+}
+
+.day-marker:hover,
+.day-marker:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.28);
+  outline-offset: 3px;
+}
+
+.day-marker.is-selected {
+  outline: 3px solid var(--link);
+  outline-offset: 3px;
 }
 
 .month-marker {
@@ -229,6 +273,58 @@ h2 {
   font-size: 14px;
   font-weight: 700;
   text-align: right;
+}
+
+.selected-day-section {
+  margin-top: 28px;
+}
+
+.selected-day-section h2 {
+  margin-bottom: 14px;
+  font-size: 24px;
+}
+
+.selected-day-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--line);
+}
+
+.selected-day-item,
+.selected-day-empty {
+  margin: 0;
+  background: var(--card);
+  padding: 14px 16px;
+}
+
+.selected-day-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.selected-day-medication {
+  min-width: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.selected-day-time,
+.selected-day-empty {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.selected-day-time {
+  flex: 0 0 auto;
 }
 
 .section-heading {

@@ -7,7 +7,13 @@ const ELEMENT_IDS = [
   "status-panel",
   "medication-view",
   "refresh-button",
+  "calendar-previous",
+  "calendar-next",
+  "calendar-hover-summary",
   "calendar-grid",
+  "selected-day-section",
+  "selected-day-title",
+  "selected-day-list",
   "page-title",
   "nav-title",
   "highlight-name",
@@ -59,6 +65,10 @@ class FakeElement {
   appendChild(child) {
     this.children.push(child);
     return child;
+  }
+
+  append(...children) {
+    this.children.push(...children);
   }
 
   insertAdjacentHTML(_position, html) {
@@ -180,9 +190,9 @@ test("loadUsers renders medication detail data from users, medications, and even
   assert.deepEqual(seenUrls.slice(0, 2), ["/api/users", "/api/users/1/medications"]);
   assert.equal(eventsUrl.pathname, "/api/users/1/medication-events");
   assert.equal(eventsUrl.searchParams.get("limit"), "500");
-  assert.equal(eventsUrl.searchParams.get("nickname"), "Klonopin");
+  assert.equal(eventsUrl.searchParams.has("nickname"), false);
   assert.match(eventsUrl.searchParams.get("date_from"), /^\d{4}-\d{2}-\d{2}$/);
-  assert.match(eventsUrl.searchParams.get("date_to"), /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(eventsUrl.searchParams.get("date_to"), /^\d{4}-\d{2}-\d{2} 23:59:59$/);
 });
 
 test("loadUsers queries raw medication events when the selected medication has no nickname", async () => {
@@ -233,6 +243,40 @@ test("loadUsers surfaces API detail errors in the status panel", async () => {
 
   assert.equal(elements.get("status-panel").textContent, '{"detail":"Not Found"}');
   assert.equal(elements.get("status-panel").classList.contains("is-error"), true);
+});
+
+test("renderSelectedDay displays every medication taken on the selected date", async () => {
+  const elements = setupDom();
+  const { groupEventsByDate, renderSelectedDay } = await importApp();
+  const eventsByDate = groupEventsByDate([
+    {
+      medication: "clonazepam 0.5 MG Oral Tablet",
+      nickname: "Klonopin",
+      date_text: "2026-05-15 20:30:00 -0400",
+    },
+    {
+      medication: "lisdexamfetamine 50 MG Oral Capsule",
+      nickname: "Vyvanse",
+      date_text: "2026-05-15 08:00:00 -0400",
+    },
+    {
+      medication: "Vitamin D",
+      nickname: null,
+      date_text: "2026-05-16 09:00:00 -0400",
+    },
+  ]);
+
+  renderSelectedDay(eventsByDate, "2026-05-15");
+
+  const section = elements.get("selected-day-section");
+  const list = elements.get("selected-day-list");
+  assert.equal(section.hidden, false);
+  assert.equal(elements.get("selected-day-title").textContent, "Taken on May 15, 2026");
+  assert.equal(list.children.length, 2);
+  assert.equal(list.children[0].children[0].textContent, "Vyvanse");
+  assert.equal(list.children[0].children[1].textContent, "8:00 AM");
+  assert.equal(list.children[1].children[0].textContent, "Klonopin");
+  assert.equal(list.children[1].children[1].textContent, "8:30 PM");
 });
 
 function response(payload) {

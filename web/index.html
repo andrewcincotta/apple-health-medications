@@ -44,6 +44,11 @@
             <span id="highlight-name"></span>
           </div>
           <p class="headline" id="highlight-copy"></p>
+          <div class="calendar-controls" aria-label="Calendar navigation">
+            <button type="button" id="calendar-previous" aria-label="Show previous 28 days">‹</button>
+            <p id="calendar-hover-summary" aria-live="polite"></p>
+            <button type="button" id="calendar-next" aria-label="Show next 28 days">›</button>
+          </div>
           <div class="weekday-row" aria-hidden="true">
             <span>Sun</span>
             <span>Mon</span>
@@ -56,6 +61,11 @@
           <div class="calendar-grid" id="calendar-grid" aria-label="Last 28 days medication log"></div>
           <p class="range-copy" id="range-copy"></p>
         </article>
+
+        <section class="selected-day-section" id="selected-day-section" hidden>
+          <h2 id="selected-day-title"></h2>
+          <ul class="selected-day-list" id="selected-day-list"></ul>
+        </section>
 
         <div class="section-heading">
           <h2>Details</h2>
