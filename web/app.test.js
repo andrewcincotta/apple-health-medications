@@ -62,6 +62,10 @@ class FakeElement {
     this[`on${type}`] = listener;
   }
 
+  click() {
+    this.onclick?.();
+  }
+
   appendChild(child) {
     this.children.push(child);
     return child;
@@ -278,6 +282,110 @@ test("renderSelectedDay displays every medication taken on the selected date", a
   assert.equal(list.children[1].children[0].textContent, "Klonopin");
   assert.equal(list.children[1].children[1].textContent, "8:30 PM");
 });
+
+test("calendar date buttons toggle the selected day summary", async () => {
+  const elements = setupDom();
+  const today = new Date();
+  const todayIso = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  globalThis.fetch = async (url) => {
+    if (url === "/api/users") return response([{ id: 1, name: "Andrew" }]);
+    if (url === "/api/users/1/medications") {
+      return response([
+        {
+          medication: "lisdexamfetamine 50 MG Oral Capsule",
+          nickname: "Vyvanse",
+          unit_mg: 50,
+          dosage_mg: 50,
+          display_name: "Vyvanse",
+        },
+      ]);
+    }
+    if (url.startsWith("/api/users/1/medication-events?")) {
+      return response([
+        {
+          medication: "lisdexamfetamine 50 MG Oral Capsule",
+          nickname: "Vyvanse",
+          date_text: `${todayIso} 08:00:00 -0400`,
+        },
+        {
+          medication: "Vitamin D",
+          nickname: null,
+          date_text: `${todayIso} 09:00:00 -0400`,
+        },
+      ]);
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const { loadUsers } = await importApp();
+  await loadUsers();
+
+  const marker = findElement(
+    elements.get("calendar-grid"),
+    (element) => element.tagName === "BUTTON" && element.textContent === String(today.getDate()),
+  );
+
+  marker.onmouseenter();
+  assert.equal(elements.get("calendar-hover-summary").textContent, `${todayIso}: 2 medication entries`);
+
+  marker.click();
+  assert.equal(elements.get("selected-day-section").hidden, false);
+  assert.equal(elements.get("selected-day-list").children.length, 2);
+
+  marker.click();
+  assert.equal(elements.get("selected-day-section").hidden, true);
+  assert.equal(elements.get("selected-day-list").children.length, 0);
+});
+
+test("calendar arrow buttons move the visible 28 day window", async () => {
+  const elements = setupDom();
+  const seenEventUrls = [];
+  globalThis.fetch = async (url) => {
+    if (url === "/api/users") return response([{ id: 1, name: "Andrew" }]);
+    if (url === "/api/users/1/medications") {
+      return response([
+        {
+          medication: "lisdexamfetamine 50 MG Oral Capsule",
+          nickname: "Vyvanse",
+          unit_mg: 50,
+          dosage_mg: 50,
+          display_name: "Vyvanse",
+        },
+      ]);
+    }
+    if (url.startsWith("/api/users/1/medication-events?")) {
+      seenEventUrls.push(url);
+      return response([]);
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+
+  const { loadUsers } = await importApp();
+  await loadUsers();
+
+  elements.get("calendar-previous").click();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(seenEventUrls.length, 2);
+  const first = new URL(seenEventUrls[0], "http://example.test");
+  const second = new URL(seenEventUrls[1], "http://example.test");
+  assert.notEqual(second.searchParams.get("date_from"), first.searchParams.get("date_from"));
+  assert.notEqual(second.searchParams.get("date_to"), first.searchParams.get("date_to"));
+});
+
+function findElement(root, predicate) {
+  if (predicate(root)) return root;
+  for (const child of root.children) {
+    const match = findElement(child, predicate);
+    if (match) return match;
+  }
+  return null;
+}
 
 function response(payload) {
   return {

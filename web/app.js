@@ -132,9 +132,24 @@ export function renderSelectedDay(eventsByDate, iso) {
   });
 }
 
+function hideSelectedDay() {
+  const section = document.querySelector("#selected-day-section");
+  const title = document.querySelector("#selected-day-title");
+  const list = document.querySelector("#selected-day-list");
+
+  selectedDate = null;
+  section.hidden = true;
+  title.textContent = "";
+  list.replaceChildren();
+}
+
 function selectCalendarDate(iso, days, loggedDates, eventsByDate) {
-  selectedDate = iso;
-  renderSelectedDay(eventsByDate, iso);
+  if (selectedDate === iso) {
+    hideSelectedDay();
+  } else {
+    selectedDate = iso;
+    renderSelectedDay(eventsByDate, iso);
+  }
   renderMedicationCalendar(days, loggedDates, eventsByDate);
 }
 
@@ -151,7 +166,7 @@ function renderMedicationCalendar(days, loggedDates, eventsByDate) {
 
 function moveCalendarWindow(days) {
   calendarEndDate = addDays(calendarEndDate, days);
-  selectedDate = null;
+  hideSelectedDay();
   loadEvents().catch((error) => setStatus(error.message, true));
 }
 
@@ -190,7 +205,7 @@ export async function loadEvents() {
   document.querySelector("#range-copy").textContent =
     `${loggedDates.size} of ${LOOKBACK_DAYS} days logged`;
 
-  document.querySelector("#selected-day-section").hidden = true;
+  hideSelectedDay();
   renderMedicationCalendar(days, loggedDates, eventsByDate);
   showView();
 }

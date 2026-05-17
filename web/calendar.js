@@ -46,6 +46,8 @@ export function renderCalendar({
     const count = events.length;
     const cell = document.createElement("div");
     cell.className = "day-cell";
+    cell.addEventListener("mouseenter", () => setCalendarSummary(summary, iso, count));
+    cell.addEventListener("pointerenter", () => setCalendarSummary(summary, iso, count));
     if (index === 0) {
       cell.style.gridColumn = String(day.getDay() + 1);
     }
@@ -61,7 +63,10 @@ export function renderCalendar({
       "aria-label",
       `${iso}: ${loggedDates.has(iso) ? "selected medication logged" : "selected medication not logged"}, ${dayCountLabel(count)}`,
     );
+    marker.setAttribute("aria-pressed", iso === selectedDate ? "true" : "false");
+    marker.setAttribute("aria-expanded", iso === selectedDate ? "true" : "false");
     marker.addEventListener("mouseenter", () => setCalendarSummary(summary, iso, count));
+    marker.addEventListener("pointerenter", () => setCalendarSummary(summary, iso, count));
     marker.addEventListener("focus", () => setCalendarSummary(summary, iso, count));
     marker.addEventListener("click", () => onDateSelect(iso));
 
