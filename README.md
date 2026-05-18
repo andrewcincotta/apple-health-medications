@@ -32,6 +32,12 @@ API docs are available at http://localhost:8000/docs.
 
 OpenAPI JSON is available at http://localhost:8000/openapi.json.
 
+Download a zip backup of the configured data directory:
+
+```bash
+curl -L http://localhost:8000/data.zip -o apple-health-medications-data.zip
+```
+
 ## Environment
 
 Copy the example environment file before first deploy:
@@ -64,6 +70,7 @@ exports or scratch comparison files.
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | Health check |
+| `GET` | `/data.zip` | Download the configured application data directory as a zip archive |
 | `POST` | `/users` | Create a user |
 | `GET` | `/users` | List users |
 | `PUT` | `/users/{user_id}/mapping` | Store or replace that user's medication mapping JSON |

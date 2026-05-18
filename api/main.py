@@ -3,6 +3,8 @@ import hashlib
 import io
 import json
 import shutil
+import tempfile
+import zipfile
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -11,6 +13,7 @@ from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, Path as ApiPath, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from api.config import get_settings
 from api.database import ensure_user, get_connection, init_db, relative_to_cwd
@@ -87,6 +90,30 @@ def _store_upload(file: UploadFile, destination: Path) -> None:
 def _safe_filename(filename: str | None) -> str:
     name = Path(filename or "upload.csv").name
     return name if name.endswith(".csv") else f"{name}.csv"
+
+
+def _data_root() -> Path:
+    return get_settings().database_path.parent
+
+
+def _build_data_zip(data_root: Path) -> Path:
+    if not data_root.exists() or not data_root.is_dir():
+        raise HTTPException(status_code=404, detail="data directory not found")
+
+    zip_file = tempfile.NamedTemporaryFile(prefix="apple-health-medications-data-", suffix=".zip", delete=False)
+    zip_path = Path(zip_file.name)
+    zip_file.close()
+
+    try:
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(data_root.rglob("*")):
+                if path.is_file():
+                    archive.write(path, path.relative_to(data_root))
+    except Exception:
+        zip_path.unlink(missing_ok=True)
+        raise
+
+    return zip_path
 
 
 def _user_mapping(user_id: int) -> dict:
@@ -210,6 +237,29 @@ def startup() -> None:
 )
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get(
+    "/data.zip",
+    tags=["Health"],
+    summary="Download application data as a zip archive",
+    description=(
+        "Builds and returns a zip archive of the configured data directory. "
+        "In Docker Compose this is the `/data` bind mount containing SQLite "
+        "database files and stored CSV uploads."
+    ),
+    response_class=FileResponse,
+)
+def download_data_zip() -> FileResponse:
+    data_root = _data_root()
+    zip_path = _build_data_zip(data_root)
+    filename = f"apple-health-medications-data-{date.today().isoformat()}.zip"
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(zip_path.unlink, missing_ok=True),
+    )
 
 
 @app.post(
