@@ -71,8 +71,10 @@ exports or scratch comparison files.
 | --- | --- | --- |
 | `GET` | `/health` | Health check |
 | `GET` | `/data.zip` | Download the configured application data directory as a zip archive |
-| `POST` | `/users` | Create a user |
-| `GET` | `/users` | List users |
+| `POST` | `/users` | Create a user, optionally providing a `password` |
+| `GET` | `/users` | List users, including `has_password` status |
+| `POST` | `/users/{user_id}/verify-password` | Verify a user's password |
+| `PUT` | `/users/{user_id}/password` | Set or update a user's password |
 | `PUT` | `/users/{user_id}/mapping` | Store or replace that user's medication mapping JSON |
 | `GET` | `/users/{user_id}/mapping` | Fetch the user's mapping, falling back to `config/default_medication_map.json` |
 | `POST` | `/users/{user_id}/medication-events/remap` | Reapply the active mapping to existing SQLite medication events |
@@ -88,12 +90,28 @@ exports or scratch comparison files.
 
 ## Example Flow
 
-Create a user:
+Create a user with a password:
 
 ```bash
 curl -X POST http://localhost:8000/users \
   -H "Content-Type: application/json" \
-  -d '{"name":"andrew"}'
+  -d '{"name":"andrew", "password":"mysecretpassword"}'
+```
+
+Verify a password:
+
+```bash
+curl -X POST http://localhost:8000/users/1/verify-password \
+  -H "Content-Type: application/json" \
+  -d '{"password":"mysecretpassword"}'
+```
+
+Set or update a password for an existing user:
+
+```bash
+curl -X PUT http://localhost:8000/users/1/password \
+  -H "Content-Type: application/json" \
+  -d '{"password":"newsecurepassword"}'
 ```
 
 Upload and transform a raw Apple Health medication export:
