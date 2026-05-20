@@ -76,6 +76,12 @@ class PasswordPayload(BaseModel):
     password: str = Field(min_length=4)
 
 
+class MedicationUpdate(BaseModel):
+    nickname: str | None = None
+    dosage_amount: float | None = None
+    unit: str | None = None
+
+
 def _hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
@@ -931,6 +937,95 @@ def list_medications(
         medication = dict(row)
         medications.append({**medication, "display_name": _display_name(medication)})
     return medications
+
+
+@app.post(
+    "/users/{user_id}/medications/sync",
+    tags=["Medications"],
+    summary="Sync unique medications to managed table",
+    description="Finds unique medication names in events and ensures they exist in the managed table.",
+)
+def sync_user_medications(
+    user_id: Annotated[int, ApiPath(description="User id.")],
+) -> dict:
+    with get_connection() as conn:
+        ensure_user(conn, user_id)
+        # Find unique meds in events that aren't in user_medications
+        unique_meds = conn.execute(
+            """
+            SELECT DISTINCT medication, nickname, unit_mg
+            FROM medication_events
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchall()
+
+        synced = 0
+        for row in unique_meds:
+            cursor = conn.execute(
+                """
+                INSERT INTO user_medications (user_id, medication_name, nickname, dosage_amount)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, medication_name) DO NOTHING
+                """,
+                (user_id, row["medication"], row["nickname"], row["unit_mg"]),
+            )
+            if cursor.rowcount > 0:
+                synced += 1
+
+    return {"status": "success", "synced_count": synced}
+
+
+@app.get(
+    "/users/{user_id}/medications/managed",
+    tags=["Medications"],
+    summary="List managed medications",
+    description="Returns all medications from the editable user_medications table.",
+)
+def list_managed_medications(
+    user_id: Annotated[int, ApiPath(description="User id.")],
+) -> list[dict]:
+    with get_connection() as conn:
+        ensure_user(conn, user_id)
+        rows = conn.execute(
+            "SELECT * FROM user_medications WHERE user_id = ? ORDER BY medication_name",
+            (user_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.patch(
+    "/users/{user_id}/medications/{medication_id}",
+    tags=["Medications"],
+    summary="Update managed medication",
+    description="Updates metadata for a managed medication.",
+)
+def update_managed_medication(
+    user_id: Annotated[int, ApiPath(description="User id.")],
+    medication_id: Annotated[int, ApiPath(description="Medication id.")],
+    payload: MedicationUpdate,
+) -> dict:
+    update_data = payload.model_dump(exclude_unset=True)
+    if not update_data:
+        return {"status": "no changes"}
+
+    fields = []
+    params = []
+    for key, value in update_data.items():
+        fields.append(f"{key} = ?")
+        params.append(value)
+    
+    params.extend([medication_id, user_id])
+    
+    with get_connection() as conn:
+        cursor = conn.execute(
+            f"UPDATE user_medications SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+            params,
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Medication not found")
+            
+    return {"status": "success"}
 
 
 @app.get(

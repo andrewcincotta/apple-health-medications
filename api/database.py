@@ -93,6 +93,18 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_medication_events_user_nickname
                 ON medication_events(user_id, nickname);
+
+            CREATE TABLE IF NOT EXISTS user_medications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                medication_name TEXT NOT NULL,
+                nickname TEXT,
+                dosage_amount REAL,
+                unit TEXT NOT NULL DEFAULT 'mg',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, medication_name)
+            );
             """
         )
 

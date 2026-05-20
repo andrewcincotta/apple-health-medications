@@ -118,18 +118,25 @@
       </section>
     </section>
 
-    <!-- Edit View (Placeholder) -->
+    <!-- Edit View -->
     <section id="edit-view" class="view-container hidden">
       <header class="view-header">
         <button id="back-to-landing-from-edit" class="back-btn">‹ Back</button>
         <div class="header-content">
           <p class="eyebrow" id="edit-user-name"></p>
-          <h1>Edit Medications</h1>
+          <h1>Managed Medications</h1>
+        </div>
+        <div class="edit-actions">
+          <button id="sync-meds-btn" class="secondary-btn small">
+            <span class="btn-icon">🔄</span>
+            <span class="btn-text">Sync from History</span>
+          </button>
         </div>
       </header>
-      <div class="placeholder-card">
-        <p>Edit functionality is coming soon.</p>
-        <p class="muted">This section will allow you to make changes to medication metadata through new database tables.</p>
+
+      <div id="managed-meds-list" class="managed-meds-list">
+        <!-- Managed medication cards will be injected here -->
+        <p class="status-panel">Loading medications...</p>
       </div>
     </section>
   </main>
