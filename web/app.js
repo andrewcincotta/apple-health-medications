@@ -30,6 +30,8 @@ const userActions = document.querySelector("#user-actions");
 const backToLandingFromCalendar = document.querySelector("#back-to-landing-from-calendar");
 const backToLandingFromEdit = document.querySelector("#back-to-landing-from-edit");
 const refreshButton = document.querySelector("#refresh-button");
+const syncMedsBtn = document.querySelector("#sync-meds-btn");
+const managedMedsList = document.querySelector("#managed-meds-list");
 
 // Labels
 const calendarUserName = document.querySelector("#calendar-user-name");
@@ -368,6 +370,117 @@ async function handlePasswordSubmit() {
   }
 }
 
+function renderManagedMedicationCard(med) {
+  const card = document.createElement("div");
+  card.className = "managed-med-card";
+  card.dataset.id = med.id;
+
+  card.innerHTML = `
+    <div class="med-header">
+      <div>
+        <h3>${med.nickname || med.medication_name}</h3>
+        <span class="raw-name">${med.medication_name}</span>
+      </div>
+    </div>
+    <div class="med-edit-form">
+      <div class="form-group">
+        <label>Nickname</label>
+        <input type="text" class="edit-nickname" value="${med.nickname || ""}" placeholder="e.g. Advil">
+      </div>
+      <div class="form-group">
+        <label>Dosage</label>
+        <input type="number" step="0.01" class="edit-dosage" value="${med.dosage_amount || ""}" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Unit</label>
+        <input type="text" class="edit-unit" value="${med.unit || "mg"}" placeholder="mg">
+      </div>
+      <div class="form-group" style="justify-content: end; display: flex;">
+        <button class="primary-btn small save-med-btn" style="padding: 8px 16px; font-size: 14px; border-radius: 10px; width: auto; margin-top: auto;">Save</button>
+      </div>
+    </div>
+    <div class="public-info-placeholder" style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted);">
+      <span class="btn-icon">ℹ️</span> <em>Public medication info placeholder...</em>
+    </div>
+    <span class="save-status"></span>
+  `;
+
+  const saveBtn = card.querySelector(".save-med-btn");
+  saveBtn.onclick = () => updateMedication(med.id, card);
+
+  return card;
+}
+
+async function loadManagedMedications() {
+  const userId = userSelect.value;
+  managedMedsList.innerHTML = `<p class="status-panel">Loading medications...</p>`;
+  
+  try {
+    const meds = await fetchJson(`/users/${userId}/medications/managed`);
+    managedMedsList.replaceChildren();
+    
+    if (meds.length === 0) {
+      managedMedsList.innerHTML = `<p class="status-panel">No managed medications found. Click Sync to import them from history.</p>`;
+    } else {
+      meds.forEach(med => {
+        managedMedsList.appendChild(renderManagedMedicationCard(med));
+      });
+    }
+  } catch (error) {
+    managedMedsList.innerHTML = `<p class="status-panel is-error">${error.message}</p>`;
+  }
+}
+
+async function syncMedications() {
+  const userId = userSelect.value;
+  syncMedsBtn.disabled = true;
+  syncMedsBtn.querySelector(".btn-text").textContent = "Syncing...";
+  
+  try {
+    const result = await fetchJson(`/users/${userId}/medications/sync`, { method: "POST" });
+    await loadManagedMedications();
+    alert(`Sync complete! ${result.synced_count} new medications added.`);
+  } catch (error) {
+    alert(`Sync failed: ${error.message}`);
+  } finally {
+    syncMedsBtn.disabled = false;
+    syncMedsBtn.querySelector(".btn-text").textContent = "Sync from History";
+  }
+}
+
+async function updateMedication(medId, card) {
+  const userId = userSelect.value;
+  const status = card.querySelector(".save-status");
+  const saveBtn = card.querySelector(".save-med-btn");
+  
+  const payload = {
+    nickname: card.querySelector(".edit-nickname").value || null,
+    dosage_amount: parseFloat(card.querySelector(".edit-dosage").value) || null,
+    unit: card.querySelector(".edit-unit").value || "mg"
+  };
+
+  status.textContent = "Saving...";
+  status.className = "save-status";
+  saveBtn.disabled = true;
+
+  try {
+    await fetchJson(`/users/${userId}/medications/${medId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    status.textContent = "Saved successfully!";
+    status.classList.add("success");
+    card.querySelector("h3").textContent = payload.nickname || card.querySelector(".raw-name").textContent;
+  } catch (error) {
+    status.textContent = `Error: ${error.message}`;
+    status.classList.add("error");
+  } finally {
+    saveBtn.disabled = false;
+    setTimeout(() => { if (status.classList.contains("success")) status.textContent = ""; }, 3000);
+  }
+}
+
 function switchView(viewId) {
   [landingPage, calendarView, editView].forEach(view => view.classList.add("hidden"));
   if (viewId === "landing") {
@@ -381,6 +494,7 @@ function switchView(viewId) {
     loadMedications().catch((error) => setStatus(error.message, true));
   } else if (viewId === "edit") {
     editView.classList.remove("hidden");
+    loadManagedMedications();
   }
 }
 
@@ -400,6 +514,8 @@ export function startApp() {
   
   backToLandingFromCalendar.addEventListener("click", () => switchView("landing"));
   backToLandingFromEdit.addEventListener("click", () => switchView("landing"));
+
+  syncMedsBtn.addEventListener("click", syncMedications);
 
   passwordSubmitBtn.addEventListener("click", handlePasswordSubmit);
   passwordCancelBtn.addEventListener("click", hidePasswordModal);

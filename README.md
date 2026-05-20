@@ -75,6 +75,9 @@ exports or scratch comparison files.
 | `GET` | `/users` | List users, including `has_password` status |
 | `POST` | `/users/{user_id}/verify-password` | Verify a user's password |
 | `PUT` | `/users/{user_id}/password` | Set or update a user's password |
+| `POST` | `/users/{user_id}/medications/sync` | Pull unique medications from history into managed table |
+| `GET` | `/users/{user_id}/medications/managed` | List medications from the managed table |
+| `PATCH` | `/users/{user_id}/medications/{medication_id}` | Update metadata for a managed medication |
 | `PUT` | `/users/{user_id}/mapping` | Store or replace that user's medication mapping JSON |
 | `GET` | `/users/{user_id}/mapping` | Fetch the user's mapping, falling back to `config/default_medication_map.json` |
 | `POST` | `/users/{user_id}/medication-events/remap` | Reapply the active mapping to existing SQLite medication events |
