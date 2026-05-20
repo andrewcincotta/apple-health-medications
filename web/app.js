@@ -176,11 +176,25 @@ export function renderSelectedDay(eventsByDate, iso) {
     name.className = "selected-day-medication";
     name.textContent = selectedMedicationName(event);
 
+    const info = document.createElement("div");
+    info.className = "selected-day-info";
+    info.style.textAlign = "right";
+
     const time = document.createElement("span");
     time.className = "selected-day-time";
     time.textContent = eventTimeLabel(event.date_text);
+    time.style.display = "block";
 
-    item.append(name, time);
+    const dosage = document.createElement("span");
+    dosage.className = "selected-day-dosage";
+    const doseVal = event.dosage_mg ?? (event.count * (event.unit_mg || 0));
+    dosage.textContent = doseVal > 0 ? `${Number(doseVal).toLocaleString("en-US", { maximumFractionDigits: 2 })} mg` : "";
+    dosage.style.fontSize = "13px";
+    dosage.style.color = "var(--muted)";
+    dosage.style.fontWeight = "600";
+
+    info.append(time, dosage);
+    item.append(name, info);
     list.appendChild(item);
   });
 }

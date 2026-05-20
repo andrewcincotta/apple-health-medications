@@ -328,18 +328,27 @@ h2 {
 .day-marker {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border: 0;
   border-radius: 999px;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   background: transparent;
+  transition: transform 0.1s ease;
+}
+
+.day-marker.is-today {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 6px #77797d;
 }
 
 .day-marker.is-selected {
-  outline: 2px solid var(--link);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 6px var(--link);
+  z-index: 1;
+}
+
+.day-marker.is-today.is-selected {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 6px var(--link), 0 0 0 10px #77797d;
 }
 
 .month-marker {
