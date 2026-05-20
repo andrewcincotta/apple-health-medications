@@ -301,7 +301,10 @@ function onUserSelected() {
   calendarUserName.textContent = user.name;
   editUserName.textContent = user.name;
   userActions.classList.remove("hidden");
-  isPasswordVerified = !user.has_password;
+  
+  // Check if already verified via cookie
+  const isPreviouslyVerified = getCookie(`auth_verified_${userId}`) === "true";
+  isPasswordVerified = !user.has_password || isPreviouslyVerified;
 }
 
 function showPasswordModal(viewId) {
@@ -336,6 +339,8 @@ async function handlePasswordSubmit() {
       body: JSON.stringify({ password }),
     });
     
+    // Set a verification cookie that lasts for the session (or 30 days as per current setCookie)
+    setCookie(`auth_verified_${userId}`, "true");
     isPasswordVerified = true;
     hidePasswordModal();
     if (currentPendingViewId) {
@@ -355,7 +360,8 @@ function switchView(viewId) {
     landingPage.classList.remove("hidden");
     const userId = userSelect.value;
     const user = users.find(u => String(u.id) === userId);
-    isPasswordVerified = user ? !user.has_password : false;
+    const isPreviouslyVerified = userId ? getCookie(`auth_verified_${userId}`) === "true" : false;
+    isPasswordVerified = user ? (!user.has_password || isPreviouslyVerified) : false;
   } else if (viewId === "calendar") {
     calendarView.classList.remove("hidden");
     loadMedications().catch((error) => setStatus(error.message, true));
