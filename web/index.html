@@ -3,89 +3,118 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Medication Highlights</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Apple Health Medications</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 
 <body>
   <main class="app-shell">
-    <header class="topbar">
-      <div>
+    <!-- Landing Page -->
+    <section id="landing-page" class="view-container">
+      <header class="landing-header">
         <p class="eyebrow">Apple Health Medications</p>
-        <h1 id="page-title">Highlights</h1>
+        <h1>Welcome</h1>
+      </header>
+      
+      <div class="user-selection-card">
+        <label for="user-select">Select User</label>
+        <select id="user-select">
+          <option value="" disabled selected>Choose a user...</option>
+        </select>
       </div>
-      <div class="selectors" aria-label="Medication filters">
-        <label>
-          <span>User</span>
-          <select id="user-select"></select>
-        </label>
-        <label>
-          <span>Medication</span>
+
+      <div id="user-actions" class="user-actions hidden">
+        <button id="view-calendar-btn" class="primary-btn">
+          <span class="btn-icon">📅</span>
+          <span class="btn-text">View Highlights</span>
+        </button>
+        <button id="view-edit-btn" class="secondary-btn">
+          <span class="btn-icon">✏️</span>
+          <span class="btn-text">Edit Medications</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Calendar View -->
+    <section id="calendar-view" class="view-container hidden">
+      <header class="view-header">
+        <button id="back-to-landing-from-calendar" class="back-btn">‹ Back</button>
+        <div class="header-content">
+          <p class="eyebrow" id="calendar-user-name"></p>
+          <h1 id="page-title">Highlights</h1>
+        </div>
+        <div class="medication-selector-wrapper">
           <select id="medication-select"></select>
-        </label>
-      </div>
-    </header>
+        </div>
+      </header>
 
-    <section class="status-panel" id="status-panel" role="status">Loading medication history...</section>
+      <section class="status-panel" id="status-panel" role="status" hidden></section>
 
-    <section class="phone-frame" id="medication-view" hidden>
-      <nav class="ios-nav" aria-label="Mock medication detail navigation">
-        <span class="back-link">‹ Medications</span>
-        <strong id="nav-title"></strong>
-        <span></span>
-      </nav>
+      <section class="phone-frame" id="medication-view" hidden>
+        <article class="highlight-card">
+          <div class="med-label">
+            <span class="pill-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+            </span>
+            <span id="highlight-name"></span>
+          </div>
+          <p class="headline" id="highlight-copy"></p>
+          <div class="calendar-controls" aria-label="Calendar navigation">
+            <button type="button" id="calendar-previous" aria-label="Show previous 28 days">‹</button>
+            <p id="calendar-hover-summary" aria-live="polite"></p>
+            <button type="button" id="calendar-next" aria-label="Show next 28 days">›</button>
+          </div>
+          <div class="weekday-row" aria-hidden="true">
+            <span>S</span>
+            <span>M</span>
+            <span>T</span>
+            <span>W</span>
+            <span>T</span>
+            <span>F</span>
+            <span>S</span>
+          </div>
+          <div class="calendar-grid" id="calendar-grid" aria-label="Last 28 days medication log"></div>
+          <p class="range-copy" id="range-copy"></p>
+        </article>
 
-      <h2>Highlights</h2>
-      <article class="highlight-card">
-        <div class="med-label">
-          <span class="pill-icon" aria-hidden="true">
+        <section class="selected-day-section" id="selected-day-section" hidden>
+          <h2 id="selected-day-title"></h2>
+          <ul class="selected-day-list" id="selected-day-list"></ul>
+        </section>
+
+        <div class="section-heading">
+          <h2>Details</h2>
+          <button type="button" id="refresh-button">Refresh</button>
+        </div>
+        <article class="details-card">
+          <div class="tablet-art" aria-hidden="true">
             <span></span>
-            <span></span>
-          </span>
-          <span id="highlight-name"></span>
-        </div>
-        <p class="headline" id="highlight-copy"></p>
-        <div class="calendar-controls" aria-label="Calendar navigation">
-          <button type="button" id="calendar-previous" aria-label="Show previous 28 days">‹</button>
-          <p id="calendar-hover-summary" aria-live="polite"></p>
-          <button type="button" id="calendar-next" aria-label="Show next 28 days">›</button>
-        </div>
-        <div class="weekday-row" aria-hidden="true">
-          <span>Sun</span>
-          <span>Mon</span>
-          <span>Tue</span>
-          <span>Wed</span>
-          <span>Thu</span>
-          <span>Fri</span>
-          <span>Sat</span>
-        </div>
-        <div class="calendar-grid" id="calendar-grid" aria-label="Last 28 days medication log"></div>
-        <p class="range-copy" id="range-copy"></p>
-      </article>
-
-      <section class="selected-day-section" id="selected-day-section" hidden>
-        <h2 id="selected-day-title"></h2>
-        <ul class="selected-day-list" id="selected-day-list"></ul>
+          </div>
+          <div>
+            <h3 id="detail-name"></h3>
+            <p id="detail-form">Tablet</p>
+            <p id="detail-dose"></p>
+          </div>
+        </article>
       </section>
+    </section>
 
-      <div class="section-heading">
-        <h2>Details</h2>
-        <button type="button" id="refresh-button">Refresh</button>
+    <!-- Edit View (Placeholder) -->
+    <section id="edit-view" class="view-container hidden">
+      <header class="view-header">
+        <button id="back-to-landing-from-edit" class="back-btn">‹ Back</button>
+        <div class="header-content">
+          <p class="eyebrow" id="edit-user-name"></p>
+          <h1>Edit Medications</h1>
+        </div>
+      </header>
+      <div class="placeholder-card">
+        <p>Edit functionality is coming soon.</p>
+        <p class="muted">This section will allow you to make changes to medication metadata through new database tables.</p>
       </div>
-      <article class="details-card">
-        <div class="tablet-art" aria-hidden="true">
-          <span></span>
-        </div>
-        <div>
-          <h3 id="detail-name"></h3>
-          <p id="detail-form">Tablet</p>
-          <p id="detail-dose"></p>
-        </div>
-      </article>
-
-      <h2 class="about-heading">About</h2>
     </section>
   </main>
 

@@ -12,47 +12,17 @@ import { renderCalendar } from "./calendar.js";
 export const API_BASE = "/api";
 export { addDays, buildCalendarDays, localIsoDate, LOOKBACK_DAYS, parseEventDate };
 
-// View Containers
-const landingPage = document.querySelector("#landing-page");
-const calendarView = document.querySelector("#calendar-view");
-const editView = document.querySelector("#edit-view");
-
-// Selectors
 const userSelect = document.querySelector("#user-select");
 const medicationSelect = document.querySelector("#medication-select");
 const statusPanel = document.querySelector("#status-panel");
 const medicationView = document.querySelector("#medication-view");
-
-// Buttons
-const viewCalendarBtn = document.querySelector("#view-calendar-btn");
-const viewEditBtn = document.querySelector("#view-edit-btn");
-const userActions = document.querySelector("#user-actions");
-const backToLandingFromCalendar = document.querySelector("#back-to-landing-from-calendar");
-const backToLandingFromEdit = document.querySelector("#back-to-landing-from-edit");
 const refreshButton = document.querySelector("#refresh-button");
-
-// Labels
-const calendarUserName = document.querySelector("#calendar-user-name");
-const editUserName = document.querySelector("#edit-user-name");
 
 let users = [];
 let medications = [];
 let selectedMedication = null;
 let calendarEndDate = new Date();
 let selectedDate = null;
-
-// Cookie helper
-function setCookie(name, value, days = 30) {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
-}
-
-function getCookie(name) {
-  return document.cookie.split("; ").reduce((r, v) => {
-    const parts = v.split("=");
-    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
-  }, "");
-}
 
 export async function fetchJson(path) {
   const response = await fetch(`${API_BASE}${path}`);
@@ -64,40 +34,25 @@ export async function fetchJson(path) {
 }
 
 export function setStatus(message, isError = false) {
-  if (!message) {
-    statusPanel.hidden = true;
-    return;
-  }
   statusPanel.textContent = message;
   statusPanel.classList.toggle("is-error", isError);
   statusPanel.hidden = false;
 }
 
-export function showMedicationView() {
-  setStatus(null);
+export function showView() {
+  statusPanel.hidden = true;
   medicationView.hidden = false;
 }
 
 export function setOptions(select, rows, getValue, getLabel) {
-  const currentVal = select.value;
-  select.replaceChildren();
-  
-  // Add placeholder for user select if needed
-  if (select.id === "user-select") {
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.disabled = true;
-    placeholder.selected = !currentVal;
-    placeholder.textContent = "Choose a user...";
-    select.appendChild(placeholder);
-  }
-
-  rows.forEach((row) => {
-    const option = document.createElement("option");
-    option.value = getValue(row);
-    option.textContent = getLabel(row);
-    select.appendChild(option);
-  });
+  select.replaceChildren(
+    ...rows.map((row) => {
+      const option = document.createElement("option");
+      option.value = getValue(row);
+      option.textContent = getLabel(row);
+      return option;
+    }),
+  );
 }
 
 export function medicationKey(medication) {
@@ -241,6 +196,7 @@ export async function loadEvents() {
   const days = buildCalendarDays(endDate);
 
   document.querySelector("#page-title").textContent = selectedMedication.display_name;
+  document.querySelector("#nav-title").textContent = selectedMedication.display_name;
   document.querySelector("#highlight-name").textContent = selectedMedication.display_name;
   document.querySelector("#highlight-copy").textContent =
     `Here's a look at how you've logged ${selectedMedication.display_name} from ${displayDate(startDate)} to ${displayDate(endDate)}.`;
@@ -251,7 +207,7 @@ export async function loadEvents() {
 
   hideSelectedDay();
   renderMedicationCalendar(days, loggedDates, eventsByDate);
-  showMedicationView();
+  showView();
 }
 
 export async function loadMedications() {
@@ -271,44 +227,20 @@ export async function loadMedications() {
 }
 
 export async function loadUsers() {
+  setStatus("Loading users...");
   users = await fetchJson("/users");
-  setOptions(userSelect, users, (user) => String(user.id), (user) => user.name);
-  
-  const savedUserId = getCookie("selected_user_id");
-  if (savedUserId && users.some(u => String(u.id) === savedUserId)) {
-    userSelect.value = savedUserId;
-    onUserSelected();
-  }
-}
-
-function onUserSelected() {
-  const userId = userSelect.value;
-  if (!userId) {
-    userActions.classList.add("hidden");
+  if (users.length === 0) {
+    setStatus("No users found. Create a user and import medication events through the API first.");
     return;
   }
-  
-  setCookie("selected_user_id", userId);
-  const user = users.find(u => String(u.id) === userId);
-  calendarUserName.textContent = user.name;
-  editUserName.textContent = user.name;
-  userActions.classList.remove("hidden");
-}
-
-function switchView(viewId) {
-  [landingPage, calendarView, editView].forEach(view => view.classList.add("hidden"));
-  if (viewId === "landing") {
-    landingPage.classList.remove("hidden");
-  } else if (viewId === "calendar") {
-    calendarView.classList.remove("hidden");
-    loadMedications().catch((error) => setStatus(error.message, true));
-  } else if (viewId === "edit") {
-    editView.classList.remove("hidden");
-  }
+  setOptions(userSelect, users, (user) => String(user.id), (user) => user.name);
+  await loadMedications();
 }
 
 export function startApp() {
-  userSelect.addEventListener("change", onUserSelected);
+  userSelect.addEventListener("change", () => {
+    loadMedications().catch((error) => setStatus(error.message, true));
+  });
 
   medicationSelect.addEventListener("change", () => {
     loadEvents().catch((error) => setStatus(error.message, true));
@@ -318,15 +250,7 @@ export function startApp() {
     loadEvents().catch((error) => setStatus(error.message, true));
   });
 
-  viewCalendarBtn.addEventListener("click", () => switchView("calendar"));
-  viewEditBtn.addEventListener("click", () => switchView("edit"));
-  
-  backToLandingFromCalendar.addEventListener("click", () => switchView("landing"));
-  backToLandingFromEdit.addEventListener("click", () => switchView("landing"));
-
-  loadUsers().catch((error) => {
-    landingPage.innerHTML = `<div class="status-panel is-error">${error.message}</div>`;
-  });
+  loadUsers().catch((error) => setStatus(error.message, true));
 }
 
 if (!globalThis.__MEDS_SKIP_AUTO_START__) {
