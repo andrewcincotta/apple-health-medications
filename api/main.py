@@ -1,3 +1,4 @@
+import bcrypt
 import csv
 import hashlib
 import io
@@ -41,6 +42,7 @@ Typical flow:
 TAGS_METADATA = [
     {"name": "Health", "description": "Service status checks."},
     {"name": "Users", "description": "User records used to partition medication history."},
+    {"name": "Auth", "description": "User authentication and password management."},
     {"name": "Mappings", "description": "Per-user medication name and dosage mappings."},
     {"name": "CSVs", "description": "Raw CSV upload, transformation, download, and import workflows."},
     {"name": "Medications", "description": "Medication catalog metadata for UI selection."},
@@ -63,6 +65,26 @@ class UserCreate(BaseModel):
         examples=["andrew"],
         description="Display name for the person whose CSV snapshots are being stored.",
     )
+    password: str | None = Field(
+        default=None,
+        min_length=4,
+        description="Optional password to protect user data.",
+    )
+
+
+class PasswordPayload(BaseModel):
+    password: str = Field(min_length=4)
+
+
+def _hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
+
+def _verify_password(password: str, hashed: str | None) -> bool:
+    if not hashed:
+        return True
+    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 
 class MappingPayload(BaseModel):
@@ -270,12 +292,58 @@ def download_data_zip() -> FileResponse:
     description="Creates a user namespace for uploads, mappings, and medication events.",
 )
 def create_user(payload: UserCreate) -> dict:
+    password_hash = _hash_password(payload.password) if payload.password else None
     with get_connection() as conn:
         try:
-            cursor = conn.execute("INSERT INTO users (name) VALUES (?)", (payload.name,))
+            cursor = conn.execute(
+                "INSERT INTO users (name, password_hash) VALUES (?, ?)",
+                (payload.name, password_hash),
+            )
         except Exception as exc:
             raise HTTPException(status_code=409, detail="user name already exists") from exc
-        return {"id": cursor.lastrowid, "name": payload.name}
+        return {"id": cursor.lastrowid, "name": payload.name, "has_password": password_hash is not None}
+
+
+@app.post(
+    "/users/{user_id}/verify-password",
+    tags=["Auth"],
+    summary="Verify user password",
+    description="Returns success if the password matches or if the user has no password set.",
+)
+def verify_password(
+    user_id: Annotated[int, ApiPath(description="User id.")],
+    payload: PasswordPayload,
+) -> dict:
+    with get_connection() as conn:
+        user = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if _verify_password(payload.password, user["password_hash"]):
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid password")
+
+
+@app.put(
+    "/users/{user_id}/password",
+    tags=["Auth"],
+    summary="Set or update user password",
+    description="Updates the password for the specified user.",
+)
+def update_password(
+    user_id: Annotated[int, ApiPath(description="User id.")],
+    payload: PasswordPayload,
+) -> dict:
+    password_hash = _hash_password(payload.password)
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, user_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+    return {"status": "success"}
 
 
 @app.get(
@@ -286,8 +354,16 @@ def create_user(payload: UserCreate) -> dict:
 )
 def list_users() -> list[dict]:
     with get_connection() as conn:
-        rows = conn.execute("SELECT id, name, created_at FROM users ORDER BY id").fetchall()
-    return [dict(row) for row in rows]
+        rows = conn.execute("SELECT id, name, password_hash, created_at FROM users ORDER BY id").fetchall()
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "created_at": row["created_at"],
+            "has_password": row["password_hash"] is not None,
+        }
+        for row in rows
+    ]
 
 
 @app.put(

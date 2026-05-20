@@ -37,6 +37,22 @@
       </div>
     </section>
 
+    <!-- Password Modal -->
+    <div id="password-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2 id="password-modal-title">Enter Password</h2>
+        <p id="password-modal-desc">This user's data is password protected.</p>
+        <div class="password-input-wrapper">
+          <input type="password" id="password-input" placeholder="Password" />
+        </div>
+        <div class="modal-actions">
+          <button id="password-cancel-btn" class="modal-btn-secondary">Cancel</button>
+          <button id="password-submit-btn" class="modal-btn-primary">Verify</button>
+        </div>
+        <p id="password-error" class="error-text hidden">Invalid password. Please try again.</p>
+      </div>
+    </div>
+
     <!-- Calendar View -->
     <section id="calendar-view" class="view-container hidden">
       <header class="view-header">

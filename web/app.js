@@ -35,11 +35,19 @@ const refreshButton = document.querySelector("#refresh-button");
 const calendarUserName = document.querySelector("#calendar-user-name");
 const editUserName = document.querySelector("#edit-user-name");
 
+const passwordModal = document.querySelector("#password-modal");
+const passwordInput = document.querySelector("#password-input");
+const passwordSubmitBtn = document.querySelector("#password-submit-btn");
+const passwordCancelBtn = document.querySelector("#password-cancel-btn");
+const passwordError = document.querySelector("#password-error");
+
 let users = [];
 let medications = [];
 let selectedMedication = null;
 let calendarEndDate = new Date();
 let selectedDate = null;
+let currentPendingViewId = null;
+let isPasswordVerified = false;
 
 // Cookie helper
 function setCookie(name, value, days = 30) {
@@ -54,8 +62,8 @@ function getCookie(name) {
   }, "");
 }
 
-export async function fetchJson(path) {
-  const response = await fetch(`${API_BASE}${path}`);
+export async function fetchJson(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, options);
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `Request failed: ${response.status}`);
@@ -293,12 +301,61 @@ function onUserSelected() {
   calendarUserName.textContent = user.name;
   editUserName.textContent = user.name;
   userActions.classList.remove("hidden");
+  isPasswordVerified = !user.has_password;
+}
+
+function showPasswordModal(viewId) {
+  currentPendingViewId = viewId;
+  passwordModal.classList.remove("hidden");
+  passwordInput.value = "";
+  passwordError.classList.add("hidden");
+  passwordInput.focus();
+}
+
+function hidePasswordModal() {
+  passwordModal.classList.add("hidden");
+  currentPendingViewId = null;
+}
+
+async function verifyAndSwitchView(viewId) {
+  if (isPasswordVerified) {
+    switchView(viewId);
+    return;
+  }
+  showPasswordModal(viewId);
+}
+
+async function handlePasswordSubmit() {
+  const userId = userSelect.value;
+  const password = passwordInput.value;
+  
+  try {
+    await fetchJson(`/users/${userId}/verify-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    
+    isPasswordVerified = true;
+    hidePasswordModal();
+    if (currentPendingViewId) {
+      switchView(currentPendingViewId);
+    }
+  } catch (error) {
+    passwordError.textContent = error.message.includes("401") 
+      ? "Invalid password. Please try again." 
+      : "Error verifying password.";
+    passwordError.classList.remove("hidden");
+  }
 }
 
 function switchView(viewId) {
   [landingPage, calendarView, editView].forEach(view => view.classList.add("hidden"));
   if (viewId === "landing") {
     landingPage.classList.remove("hidden");
+    const userId = userSelect.value;
+    const user = users.find(u => String(u.id) === userId);
+    isPasswordVerified = user ? !user.has_password : false;
   } else if (viewId === "calendar") {
     calendarView.classList.remove("hidden");
     loadMedications().catch((error) => setStatus(error.message, true));
@@ -318,11 +375,17 @@ export function startApp() {
     loadEvents().catch((error) => setStatus(error.message, true));
   });
 
-  viewCalendarBtn.addEventListener("click", () => switchView("calendar"));
-  viewEditBtn.addEventListener("click", () => switchView("edit"));
+  viewCalendarBtn.addEventListener("click", () => verifyAndSwitchView("calendar"));
+  viewEditBtn.addEventListener("click", () => verifyAndSwitchView("edit"));
   
   backToLandingFromCalendar.addEventListener("click", () => switchView("landing"));
   backToLandingFromEdit.addEventListener("click", () => switchView("landing"));
+
+  passwordSubmitBtn.addEventListener("click", handlePasswordSubmit);
+  passwordCancelBtn.addEventListener("click", hidePasswordModal);
+  passwordInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") handlePasswordSubmit();
+  });
 
   loadUsers().catch((error) => {
     landingPage.innerHTML = `<div class="status-panel is-error">${error.message}</div>`;
