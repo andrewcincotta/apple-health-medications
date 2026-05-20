@@ -59,9 +59,6 @@ def transform_medication_csv(
     nicknames_to_dosage = mapping.get("NicknamesToDosage", {})
 
     rows = raw_rows
-    # Preserve the notebook behavior used by the reference before/after CSVs.
-    if rows and rows[0]["Scheduled Date"] != "Taken":
-        rows = rows[1:]
 
     rows = [row for row in rows if row["Dosage"] != ""]
     if not rows:
