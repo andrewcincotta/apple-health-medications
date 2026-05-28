@@ -1018,12 +1018,63 @@ def update_managed_medication(
     params.extend([medication_id, user_id])
     
     with get_connection() as conn:
-        cursor = conn.execute(
+        # Fetch the medication name before updating
+        med = conn.execute(
+            "SELECT medication_name FROM user_medications WHERE id = ? AND user_id = ?",
+            (medication_id, user_id),
+        ).fetchone()
+        if not med:
+            raise HTTPException(status_code=404, detail="Medication not found")
+
+        med_name = med["medication_name"]
+
+        # Update user_medications
+        conn.execute(
             f"UPDATE user_medications SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
             params,
         )
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Medication not found")
+
+        # Get the updated values from user_medications
+        updated = conn.execute(
+            "SELECT nickname, dosage_amount FROM user_medications WHERE id = ?",
+            (medication_id,),
+        ).fetchone()
+
+        nickname = updated["nickname"]
+        unit_mg = updated["dosage_amount"]
+
+        # Propagate the updated mapping back to medication_events
+        events = conn.execute(
+            "SELECT id, date_text, medication, count FROM medication_events WHERE user_id = ? AND medication = ?",
+            (user_id, med_name),
+        ).fetchall()
+
+        for event in events:
+            count = float(event["count"])
+            dosage_val = round(count * float(unit_mg), 3) if unit_mg is not None else None
+            
+            event_dict = {
+                "Date": event["date_text"],
+                "Medication": event["medication"],
+                "Count": count,
+                "Nickname": nickname,
+                "Unit (mg)": unit_mg,
+                "Dosage (mg)": dosage_val,
+            }
+            new_hash = _row_hash(event_dict)
+            
+            conn.execute(
+                """
+                UPDATE medication_events
+                SET nickname = ?,
+                    unit_mg = ?,
+                    dosage_mg = ?,
+                    row_hash = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (nickname, unit_mg, dosage_val, new_hash, event["id"]),
+            )
             
     return {"status": "success"}
 
