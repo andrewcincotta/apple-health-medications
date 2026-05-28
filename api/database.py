@@ -93,8 +93,26 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_medication_events_user_nickname
                 ON medication_events(user_id, nickname);
+
+            CREATE TABLE IF NOT EXISTS user_medications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                medication_name TEXT NOT NULL,
+                nickname TEXT,
+                dosage_amount REAL,
+                unit TEXT NOT NULL DEFAULT 'mg',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, medication_name)
+            );
             """
         )
+
+        # Simple schema migration: add password_hash column if it doesn't exist
+        cursor = conn.execute("PRAGMA table_info(users)")
+        columns = [row["name"] for row in cursor.fetchall()]
+        if "password_hash" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
 
 
 def ensure_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row:

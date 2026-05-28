@@ -72,7 +72,6 @@ export function renderCalendar({
 
     if (iso === todayIso) {
       marker.classList.add("is-today");
-      marker.style.boxShadow = `0 0 0 4px #f8f8fb, 0 0 0 8px ${todayColor}`;
     }
 
     if (iso === selectedDate) {
