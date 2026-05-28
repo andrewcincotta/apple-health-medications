@@ -108,6 +108,12 @@ def init_db() -> None:
             """
         )
 
+        # Simple schema migration: add password_hash column if it doesn't exist
+        cursor = conn.execute("PRAGMA table_info(users)")
+        columns = [row["name"] for row in cursor.fetchall()]
+        if "password_hash" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+
 
 def ensure_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row:
     user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
