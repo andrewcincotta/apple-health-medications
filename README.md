@@ -52,6 +52,12 @@ The default `.env` values are ready for Docker Compose:
 MEDS_DATABASE_PATH=/data/medications.db
 MEDS_STORAGE_DIR=/data/storage
 MEDS_DEFAULT_MAPPING_PATH=/app/config/default_medication_map.json
+
+# Host-mapped port customizability
+API_PORT=8000
+SQLITE_WEB_PORT=8001
+MCP_PORT=8002
+WEB_PORT=8003
 ```
 
 `.env` and `data/` are intentionally gitignored. The application data you need

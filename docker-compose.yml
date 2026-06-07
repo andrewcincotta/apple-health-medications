@@ -4,7 +4,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./data:/data
 
@@ -13,7 +13,7 @@ services:
     depends_on:
       - api
     ports:
-      - "8003:80"
+      - "${WEB_PORT:-8003}:80"
     restart: always
 
   mcp:
@@ -24,10 +24,10 @@ services:
     environment:
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
-      MCP_PORT: 8002
+      MCP_PORT: ${MCP_PORT:-8002}
       MCP_PATH: /mcp
     ports:
-      - "8002:8002"
+      - "${MCP_PORT:-8002}:${MCP_PORT:-8002}"
     volumes:
       - ./data:/data
     restart: always
@@ -37,7 +37,7 @@ services:
       context: .
       dockerfile: Dockerfile.sqlite-web
     ports:
-      - "8001:8080"
+      - "${SQLITE_WEB_PORT:-8001}:8080"
     volumes:
       - ./data:/data
     restart: always
