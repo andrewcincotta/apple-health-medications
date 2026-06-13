@@ -21,6 +21,23 @@ const ELEMENT_IDS = [
   "detail-name",
   "detail-dose",
   "range-copy",
+  "landing-page",
+  "calendar-view",
+  "edit-view",
+  "view-calendar-btn",
+  "view-edit-btn",
+  "user-actions",
+  "back-to-landing-from-calendar",
+  "back-to-landing-from-edit",
+  "sync-meds-btn",
+  "managed-meds-list",
+  "calendar-user-name",
+  "edit-user-name",
+  "password-modal",
+  "password-input",
+  "password-submit-btn",
+  "password-cancel-btn",
+  "password-error",
 ];
 
 class FakeClassList {
@@ -68,6 +85,9 @@ class FakeElement {
 
   appendChild(child) {
     this.children.push(child);
+    if (this.tagName === "SELECT" && !this.value) {
+      this.value = child.value;
+    }
     return child;
   }
 
@@ -106,6 +126,7 @@ function setupDom() {
   );
 
   globalThis.document = {
+    cookie: "",
     createElement: (tagName) => new FakeElement(tagName),
     querySelector: (selector) => {
       const id = selector.startsWith("#") ? selector.slice(1) : selector;
@@ -181,8 +202,10 @@ test("loadUsers renders medication detail data from users, medications, and even
     throw new Error(`Unexpected URL ${url}`);
   };
 
-  const { loadUsers } = await importApp();
+  const { loadUsers, loadMedications } = await importApp();
   await loadUsers();
+  elements.get("user-select").value = "1";
+  await loadMedications();
 
   assert.equal(elements.get("page-title").textContent, "Klonopin");
   assert.equal(elements.get("detail-name").textContent, "Klonopin");
@@ -227,8 +250,11 @@ test("loadUsers queries raw medication events when the selected medication has n
     throw new Error(`Unexpected URL ${url}`);
   };
 
-  const { loadUsers } = await importApp();
+  const elements = setupDom();
+  const { loadUsers, loadMedications } = await importApp();
   await loadUsers();
+  elements.get("user-select").value = "1";
+  await loadMedications();
 
   const eventsUrl = new URL(seenUrls[2], "http://example.test");
   assert.equal(eventsUrl.pathname, "/api/users/1/medication-events");
@@ -278,9 +304,9 @@ test("renderSelectedDay displays every medication taken on the selected date", a
   assert.equal(elements.get("selected-day-title").textContent, "Taken on May 15, 2026");
   assert.equal(list.children.length, 2);
   assert.equal(list.children[0].children[0].textContent, "Vyvanse");
-  assert.equal(list.children[0].children[1].textContent, "8:00 AM");
+  assert.equal(list.children[0].children[1].children[0].textContent, "8:00 AM");
   assert.equal(list.children[1].children[0].textContent, "Klonopin");
-  assert.equal(list.children[1].children[1].textContent, "8:30 PM");
+  assert.equal(list.children[1].children[1].children[0].textContent, "8:30 PM");
 });
 
 test("calendar date buttons toggle the selected day summary", async () => {
@@ -322,8 +348,10 @@ test("calendar date buttons toggle the selected day summary", async () => {
     throw new Error(`Unexpected URL ${url}`);
   };
 
-  const { loadUsers } = await importApp();
+  const { loadUsers, loadMedications } = await importApp();
   await loadUsers();
+  elements.get("user-select").value = "1";
+  await loadMedications();
 
   const marker = findElement(
     elements.get("calendar-grid"),
@@ -365,8 +393,10 @@ test("calendar arrow buttons move the visible 28 day window", async () => {
     throw new Error(`Unexpected URL ${url}`);
   };
 
-  const { loadUsers } = await importApp();
+  const { loadUsers, loadMedications } = await importApp();
   await loadUsers();
+  elements.get("user-select").value = "1";
+  await loadMedications();
 
   elements.get("calendar-previous").click();
   await new Promise((resolve) => setImmediate(resolve));
