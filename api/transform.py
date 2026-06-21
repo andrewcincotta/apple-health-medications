@@ -58,16 +58,22 @@ def transform_medication_csv(
     meds_to_nicknames = mapping.get("MedsToNicknames", {})
     nicknames_to_dosage = mapping.get("NicknamesToDosage", {})
 
-    rows = raw_rows
+    rows = [
+        row
+        for row in raw_rows
+        if row.get("Status", "").strip().casefold() == "taken"
+    ]
 
-    rows = [row for row in rows if row["Dosage"] != ""]
+    rows = [row for row in rows if row["Dosage"].strip() != ""]
     if not rows:
-        raise ValueError("raw CSV has no medication rows with a dosage value")
+        raise ValueError(
+            "raw CSV has no medication rows with status Taken and a dosage value"
+        )
 
     transformed_rows = []
     for row in rows:
         try:
-            count = float(row["Dosage"])
+            count = float(row["Dosage"].strip())
         except ValueError as exc:
             raise ValueError(
                 f"could not parse Dosage '{row['Dosage']}' for "

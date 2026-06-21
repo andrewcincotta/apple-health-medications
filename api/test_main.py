@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import tempfile
@@ -65,6 +66,51 @@ class RemapMedicationEventsTest(unittest.TestCase):
         from api.config import get_settings
 
         get_settings.cache_clear()
+
+    def test_transform_medication_csv_only_keeps_taken_rows(self) -> None:
+        from api.transform import transform_medication_csv
+
+        input_path = self.root / "raw.csv"
+        output_path = self.root / "transformed.csv"
+        mapping = {
+            "MedsToNicknames": {
+                "Drug A": "Drug A Nick",
+                "Drug D": "Drug D Nick",
+            },
+            "NicknamesToDosage": {
+                "Drug A Nick": 10,
+                "Drug D Nick": 20,
+            },
+        }
+        input_path.write_text(
+            "\n".join(
+                [
+                    "Date,Scheduled Date,Medication,Nickname,Dosage,Scheduled Dosage,Unit,Status,Archived,Codings",
+                    "2026-01-01,,Drug A,,1,,mg,Taken,,",
+                    "2026-01-02,,Drug B,,2,,mg,Skipped,,",
+                    "2026-01-03,,Drug C,,3,,mg,Not Logged,,",
+                    "2026-01-04,,Drug D,,4,,mg,Taken,,",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        raw_count, transformed_count = transform_medication_csv(input_path, output_path, mapping)
+
+        self.assertEqual(raw_count, 4)
+        self.assertEqual(transformed_count, 2)
+
+        with output_path.open("r", encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f))
+
+        self.assertEqual(
+            [row["Medication"] for row in rows],
+            ["Drug A", "Drug D"],
+        )
+        self.assertEqual(
+            [row["Dosage (mg)"] for row in rows],
+            ["10.0", "80.0"],
+        )
 
     def test_remap_medication_events_repairs_existing_rows(self) -> None:
         try:
