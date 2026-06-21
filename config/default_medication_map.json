@@ -1,8 +1,8 @@
 {
   "MedsToNicknames": {
-    "Vyvanse 50mg Capsule": "Vyvanse",
+    "Vyvanse 50mg Capsule": "Vyvanse 50",
     "Caffeine": "Caffeine",
-    "Kratom": "7-OH",
+    "Kratom": "Seven-OH",
     "KratomPowder": "Kratom",
     "Clonazepam": "Klonopin",
     "Benadryl": "Benadryl",
@@ -14,13 +14,20 @@
     "Lyrica 300mg Capsule": "Lyrica",
     "Propranolol": "Propranolol",
     "Lorazepam": "Ativan",
-    "Velo": "Velo (3mg)",
-    "Vape": "Nicotine Vape"
+    "Velo": "Nicotine Pouch",
+    "Vape": "Nicotine Vape",
+    "Wellbutrin": "Wellbutrin",
+    "Vyvanse60": "Vyvanse 60",
+    "Vyvanse30": "Vyvanse 30",
+    "Testosterone": "Test",
+    "Oxandrolone": "Anavar",
+    "Retatrutide": "Reta",
+    "Esketamine": "Spravato"
   },
   "NicknamesToDosage": {
-    "Vyvanse": 50,
+    "Vyvanse 50": 50,
     "Caffeine": 100,
-    "7-OH": 25,
+    "Seven-OH": 25,
     "Kratom": 1000,
     "Klonopin": 0.5,
     "Benadryl": 25,
@@ -32,8 +39,14 @@
     "Lyrica": 300,
     "Propranolol": 10,
     "Ativan": 0.5,
-    "Velo (3mg)": 3,
-    "Nicotine Vape": 1
+    "Nicotine Pouch": 3,
+    "Nicotine Vape": 1,
+    "Vyvanse60": 60,
+    "Vyvanse30": 30,
+    "Test": 250,
+    "Anavar": 10,
+    "Reta": 2,
+    "Spravato": 50
   },
   "NicknameToCost": {}
 }
