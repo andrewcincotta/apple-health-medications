@@ -23,6 +23,7 @@ from api.transform import (
     load_mapping,
     read_transformed_csv,
     transform_medication_csv,
+    transform_medisafe_csv,
     validate_mapping,
 )
 
@@ -550,6 +551,83 @@ def upload_and_transform_csv(
         "transformed_rows": transformed_rows,
         "raw_path": relative_to_cwd(raw_path),
         "transformed_path": relative_to_cwd(transformed_path),
+    }
+
+
+@app.post(
+    "/users/{user_id}/medisafe-csvs",
+    status_code=201,
+    tags=["CSVs"],
+    summary="Upload, transform, and import a Medisafe CSV",
+    description=(
+        "Stores a raw Medisafe CSV, transforms taken medication rows into the "
+        "standard transformed CSV shape, stores that transformed CSV, and "
+        "reconciles the rows into SQLite."
+    ),
+)
+def upload_transform_and_import_medisafe_csv(
+    user_id: Annotated[int, ApiPath(description="User id returned by `POST /users`.")],
+    file: Annotated[
+        UploadFile,
+        File(description="Raw Medisafe CSV export."),
+    ],
+) -> dict:
+    settings = get_settings()
+    filename = _safe_filename(file.filename)
+    token = uuid4().hex
+    raw_path = settings.storage_dir / "raw" / str(user_id) / "medisafe" / f"{token}-{filename}"
+    transformed_path = (
+        settings.storage_dir / "transformed" / str(user_id) / "medisafe" / f"{token}-{filename}"
+    )
+
+    with get_connection() as conn:
+        try:
+            ensure_user(conn, user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    _store_upload(file, raw_path)
+    try:
+        raw_rows, transformed_rows = transform_medisafe_csv(
+            raw_path,
+            transformed_path,
+            _user_mapping(user_id),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO csv_uploads
+                (user_id, original_filename, raw_path, transformed_path, raw_row_count, transformed_row_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                filename,
+                str(raw_path),
+                str(transformed_path),
+                raw_rows,
+                transformed_rows,
+            ),
+        )
+        upload_id = cursor.lastrowid
+
+    import_result = _import_transformed_path(
+        user_id,
+        transformed_path,
+        filename,
+        upload_id=upload_id,
+    )
+
+    return {
+        "upload_id": upload_id,
+        "raw_rows": raw_rows,
+        "transformed_rows": transformed_rows,
+        "raw_path": relative_to_cwd(raw_path),
+        "transformed_path": relative_to_cwd(transformed_path),
+        "import": import_result,
     }
 
 

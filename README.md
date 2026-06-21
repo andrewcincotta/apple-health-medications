@@ -1,6 +1,7 @@
 # apple-health-medications
 
 A small FastAPI backend for Apple Health medication CSV exports.
+Now supports Medisafe!
 
 It stores raw CSV snapshots, transforms them with the logic from
 `notebooks/apple_health_medication_transform_reference.ipynb`, and can reconcile
@@ -90,6 +91,7 @@ exports or scratch comparison files.
 | `POST` | `/medication-events/remap` | Reapply active mappings to existing SQLite medication events for all users |
 | `GET` | `/users/{user_id}/medications` | List distinct reconciled medications for UI selectors |
 | `POST` | `/users/{user_id}/csvs` | Upload a raw Apple Health CSV, store it, transform it, and store the transformed CSV |
+| `POST` | `/users/{user_id}/medisafe-csvs` | Upload a raw Medisafe CSV, transform taken rows, and import them into SQLite |
 | `GET` | `/users/{user_id}/uploads` | List uploads and discover upload ids |
 | `GET` | `/users/{user_id}/uploads/{upload_id}/transformed-csv` | Download the transformed CSV for an upload |
 | `POST` | `/users/{user_id}/uploads/{upload_id}/import` | Import a previously transformed upload into SQLite |
@@ -128,6 +130,13 @@ Upload and transform a raw Apple Health medication export:
 ```bash
 curl -X POST http://localhost:8000/users/1/csvs \
   -F "file=@/path/to/Medications-2026-04-19-2026-05-02.csv"
+```
+
+Upload, transform, and import a raw Medisafe export:
+
+```bash
+curl -X POST http://localhost:8000/users/1/medisafe-csvs \
+  -F "file=@/path/to/ExcelReport.csv"
 ```
 
 List uploads and find the `id` to use as `upload_id`:
