@@ -1,8 +1,11 @@
-export const LOOKBACK_DAYS = 28;
-
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
+  year: "numeric",
+});
+
+const monthFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "long",
   year: "numeric",
 });
 
@@ -19,13 +22,30 @@ export function addDays(date, days) {
   return next;
 }
 
+export function addMonths(date, months) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+export function addYears(date, years) {
+  return new Date(date.getFullYear() + years, date.getMonth(), 1);
+}
+
+export function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+export function endOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
 export function parseEventDate(value) {
   return value.slice(0, 10);
 }
 
-export function buildCalendarDays(endDate) {
+export function buildCalendarDays(monthDate) {
   const days = [];
-  const startDate = addDays(endDate, -(LOOKBACK_DAYS - 1));
+  const startDate = startOfMonth(monthDate);
+  const endDate = endOfMonth(monthDate);
   for (let cursor = new Date(startDate); cursor <= endDate; cursor = addDays(cursor, 1)) {
     days.push(new Date(cursor));
   }
@@ -34,6 +54,10 @@ export function buildCalendarDays(endDate) {
 
 export function displayDate(date) {
   return dateFormatter.format(date);
+}
+
+export function displayMonth(date) {
+  return monthFormatter.format(date);
 }
 
 export function eventTimeLabel(dateText) {

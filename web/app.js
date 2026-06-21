@@ -1,16 +1,27 @@
 import {
-  addDays,
+  addMonths,
+  addYears,
   buildCalendarDays,
   displayDate,
+  displayMonth,
+  endOfMonth,
   eventTimeLabel,
   localIsoDate,
-  LOOKBACK_DAYS,
   parseEventDate,
+  startOfMonth,
 } from "./date-utils.js";
 import { renderCalendar } from "./calendar.js";
 
 export const API_BASE = "/api";
-export { addDays, buildCalendarDays, localIsoDate, LOOKBACK_DAYS, parseEventDate };
+export {
+  addMonths,
+  addYears,
+  buildCalendarDays,
+  endOfMonth,
+  localIsoDate,
+  parseEventDate,
+  startOfMonth,
+};
 
 // View Containers
 const landingPage = document.querySelector("#landing-page");
@@ -46,7 +57,7 @@ const passwordError = document.querySelector("#password-error");
 let users = [];
 let medications = [];
 let selectedMedication = null;
-let calendarEndDate = new Date();
+let calendarMonth = startOfMonth(new Date());
 let selectedDate = null;
 let currentPendingViewId = null;
 let isPasswordVerified = false;
@@ -228,13 +239,21 @@ function renderMedicationCalendar(days, loggedDates, eventsByDate) {
     loggedDates,
     eventsByDate,
     selectedDate,
+    monthLabel: displayMonth(calendarMonth),
     onDateSelect: (iso) => selectCalendarDate(iso, days, loggedDates, eventsByDate),
-    onMoveWindow: moveCalendarWindow,
+    onMoveMonth: moveCalendarMonth,
+    onMoveYear: moveCalendarYear,
   });
 }
 
-function moveCalendarWindow(days) {
-  calendarEndDate = addDays(calendarEndDate, days);
+function moveCalendarMonth(months) {
+  calendarMonth = addMonths(calendarMonth, months);
+  hideSelectedDay();
+  loadEvents().catch((error) => setStatus(error.message, true));
+}
+
+function moveCalendarYear(years) {
+  calendarMonth = addYears(calendarMonth, years);
   hideSelectedDay();
   loadEvents().catch((error) => setStatus(error.message, true));
 }
@@ -248,8 +267,8 @@ export async function loadEvents() {
   setStatus("Loading selected medication...");
   medicationView.hidden = true;
 
-  const endDate = calendarEndDate;
-  const startDate = addDays(endDate, -(LOOKBACK_DAYS - 1));
+  const startDate = startOfMonth(calendarMonth);
+  const endDate = endOfMonth(calendarMonth);
   const params = new URLSearchParams({
     date_from: localIsoDate(startDate),
     date_to: `${localIsoDate(endDate)} 23:59:59`,
@@ -262,16 +281,17 @@ export async function loadEvents() {
       .map((event) => parseEventDate(event.date_text)),
   );
   const eventsByDate = groupEventsByDate(events);
-  const days = buildCalendarDays(endDate);
+  const days = buildCalendarDays(calendarMonth);
+  const monthLabel = displayMonth(calendarMonth);
 
   document.querySelector("#page-title").textContent = selectedMedication.display_name;
   document.querySelector("#highlight-name").textContent = selectedMedication.display_name;
   document.querySelector("#highlight-copy").textContent =
-    `Here's a look at how you've logged ${selectedMedication.display_name} from ${displayDate(startDate)} to ${displayDate(endDate)}.`;
+    `Here's a look at how you've logged ${selectedMedication.display_name} in ${monthLabel}.`;
   document.querySelector("#detail-name").textContent = selectedMedication.display_name;
   document.querySelector("#detail-dose").textContent = doseLabel(selectedMedication);
   document.querySelector("#range-copy").textContent =
-    `${loggedDates.size} of ${LOOKBACK_DAYS} days logged`;
+    `${loggedDates.size} of ${days.length} days logged`;
 
   hideSelectedDay();
   renderMedicationCalendar(days, loggedDates, eventsByDate);
@@ -289,7 +309,7 @@ export async function loadMedications() {
   }
 
   setOptions(medicationSelect, medications, medicationKey, (medication) => medication.display_name);
-  calendarEndDate = new Date();
+  calendarMonth = startOfMonth(new Date());
   selectedDate = null;
   await loadEvents();
 }

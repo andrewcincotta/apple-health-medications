@@ -1,4 +1,4 @@
-import { LOOKBACK_DAYS, localIsoDate } from "./date-utils.js";
+import { localIsoDate } from "./date-utils.js";
 
 const loggedColor = "#10bfdf";
 const missedColor = "#c9c9cc";
@@ -27,17 +27,23 @@ export function renderCalendar({
   loggedDates,
   eventsByDate,
   selectedDate,
+  monthLabel,
   onDateSelect,
-  onMoveWindow,
+  onMoveMonth,
+  onMoveYear,
 }) {
   const grid = document.querySelector("#calendar-grid");
   const summary = document.querySelector("#calendar-hover-summary");
+  const previousYearButton = document.querySelector("#calendar-previous-year");
   const previousButton = document.querySelector("#calendar-previous");
   const nextButton = document.querySelector("#calendar-next");
+  const nextYearButton = document.querySelector("#calendar-next-year");
   const todayIso = localIsoDate(new Date());
 
-  previousButton.onclick = () => onMoveWindow(-LOOKBACK_DAYS);
-  nextButton.onclick = () => onMoveWindow(LOOKBACK_DAYS);
+  previousYearButton.onclick = () => onMoveYear(-1);
+  previousButton.onclick = () => onMoveMonth(-1);
+  nextButton.onclick = () => onMoveMonth(1);
+  nextYearButton.onclick = () => onMoveYear(1);
   grid.replaceChildren();
 
   days.forEach((day, index) => {
@@ -88,8 +94,7 @@ export function renderCalendar({
 
   if (selectedDate) {
     setCalendarSummary(summary, selectedDate, eventsByDate.get(selectedDate)?.length ?? 0);
-  } else if (days.length > 0) {
-    const lastDayIso = localIsoDate(days[days.length - 1]);
-    setCalendarSummary(summary, lastDayIso, eventsByDate.get(lastDayIso)?.length ?? 0);
+  } else {
+    summary.textContent = monthLabel ?? "";
   }
 }

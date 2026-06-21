@@ -7,8 +7,10 @@ const ELEMENT_IDS = [
   "status-panel",
   "medication-view",
   "refresh-button",
+  "calendar-previous-year",
   "calendar-previous",
   "calendar-next",
+  "calendar-next-year",
   "calendar-hover-summary",
   "calendar-grid",
   "selected-day-section",
@@ -218,8 +220,8 @@ test("loadUsers renders medication detail data from users, medications, and even
   assert.equal(eventsUrl.pathname, "/api/users/1/medication-events");
   assert.equal(eventsUrl.searchParams.get("limit"), "500");
   assert.equal(eventsUrl.searchParams.has("nickname"), false);
-  assert.match(eventsUrl.searchParams.get("date_from"), /^\d{4}-\d{2}-\d{2}$/);
-  assert.match(eventsUrl.searchParams.get("date_to"), /^\d{4}-\d{2}-\d{2} 23:59:59$/);
+  assert.equal(eventsUrl.searchParams.get("date_from"), monthStartIso(new Date()));
+  assert.equal(eventsUrl.searchParams.get("date_to"), `${monthEndIso(new Date())} 23:59:59`);
 });
 
 test("loadUsers queries raw medication events when the selected medication has no nickname", async () => {
@@ -370,7 +372,7 @@ test("calendar date buttons toggle the selected day summary", async () => {
   assert.equal(elements.get("selected-day-list").children.length, 0);
 });
 
-test("calendar arrow buttons move the visible 28 day window", async () => {
+test("calendar arrow buttons move by month and year", async () => {
   const elements = setupDom();
   const seenEventUrls = [];
   globalThis.fetch = async (url) => {
@@ -401,12 +403,47 @@ test("calendar arrow buttons move the visible 28 day window", async () => {
   elements.get("calendar-previous").click();
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(seenEventUrls.length, 2);
+  elements.get("calendar-previous-year").click();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(seenEventUrls.length, 3);
   const first = new URL(seenEventUrls[0], "http://example.test");
   const second = new URL(seenEventUrls[1], "http://example.test");
+  const third = new URL(seenEventUrls[2], "http://example.test");
+  const currentMonth = new Date();
+  const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+  const previousMonthPreviousYear = new Date(
+    previousMonth.getFullYear() - 1,
+    previousMonth.getMonth(),
+    1,
+  );
+
+  assert.equal(first.searchParams.get("date_from"), monthStartIso(currentMonth));
+  assert.equal(first.searchParams.get("date_to"), `${monthEndIso(currentMonth)} 23:59:59`);
+  assert.equal(second.searchParams.get("date_from"), monthStartIso(previousMonth));
+  assert.equal(second.searchParams.get("date_to"), `${monthEndIso(previousMonth)} 23:59:59`);
+  assert.equal(third.searchParams.get("date_from"), monthStartIso(previousMonthPreviousYear));
+  assert.equal(third.searchParams.get("date_to"), `${monthEndIso(previousMonthPreviousYear)} 23:59:59`);
   assert.notEqual(second.searchParams.get("date_from"), first.searchParams.get("date_from"));
   assert.notEqual(second.searchParams.get("date_to"), first.searchParams.get("date_to"));
 });
+
+function monthStartIso(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    "01",
+  ].join("-");
+}
+
+function monthEndIso(date) {
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return [
+    end.getFullYear(),
+    String(end.getMonth() + 1).padStart(2, "0"),
+    String(end.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
 function findElement(root, predicate) {
   if (predicate(root)) return root;

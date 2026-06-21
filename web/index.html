@@ -79,9 +79,11 @@
           </div>
           <p class="headline" id="highlight-copy"></p>
           <div class="calendar-controls" aria-label="Calendar navigation">
-            <button type="button" id="calendar-previous" aria-label="Show previous 28 days">‹</button>
+            <button type="button" id="calendar-previous-year" aria-label="Show previous year" title="Previous year">‹‹</button>
+            <button type="button" id="calendar-previous" aria-label="Show previous month" title="Previous month">‹</button>
             <p id="calendar-hover-summary" aria-live="polite"></p>
-            <button type="button" id="calendar-next" aria-label="Show next 28 days">›</button>
+            <button type="button" id="calendar-next" aria-label="Show next month" title="Next month">›</button>
+            <button type="button" id="calendar-next-year" aria-label="Show next year" title="Next year">››</button>
           </div>
           <div class="weekday-row" aria-hidden="true">
             <span>S</span>
@@ -92,7 +94,7 @@
             <span>F</span>
             <span>S</span>
           </div>
-          <div class="calendar-grid" id="calendar-grid" aria-label="Last 28 days medication log"></div>
+          <div class="calendar-grid" id="calendar-grid" aria-label="Monthly medication log"></div>
           <p class="range-copy" id="range-copy"></p>
         </article>
 
